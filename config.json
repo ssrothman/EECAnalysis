@@ -1,0 +1,31 @@
+{
+  "branchFilter":"/FatJet|PFCand|Muon/",
+  "readCut":"(HLT_Mu18_Mu9==1) & (nMuon==2)",
+  "Zsel":{
+    "minMass":80,
+    "maxMass":102
+  },
+  "muons":{
+    "eta":"Muon_eta",
+    "phi":"Muon_phi",
+    "pt":"Muon_pt",
+    "mass":"Muon_mass",
+    "ID":"Muon_tightId",
+    "charge":"Muon_charge"
+  },
+  "jets":{
+    "mass":"FatJet_mass",
+    "eta":"FatJet_eta",
+    "phi":"FatJet_phi",
+    "pt":"FatJet_pt",
+    "id" : "FatJet_jetId",
+    "candidates" : "FatJetPFCands_pFCandsIdx",
+    "nConstituents" : "FatJet_nConstituents"
+  },
+  "PFCands":{
+    "mass" : "PFCands_mass",
+    "eta" : "PFCands_eta",
+    "phi" : "PFCands_phi",
+    "pt" : "PFCands_pt"
+  }
+}
