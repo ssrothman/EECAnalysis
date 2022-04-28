@@ -1,6 +1,31 @@
 {
-  "branchFilter":"/FatJet|PFCand|Muon/",
-  "readCut":"(HLT_Mu18_Mu9==1) & (nMuon==2)",
+  "branchFilter":"/Jet|PFCand|Muon/",
+  "triggers":[
+    "HLT_DoubleIsoMu20_eta2p1"
+  ],
+  "presel":"(nMuon==2)",
+  "muCuts":[
+    {
+      "var" : "Muon_pt",
+      "minval" : 25,
+      "maxval" : -999
+    },
+    {
+      "var" : "Muon_eta",
+      "minval" : -2.1,
+      "maxval" : 2.1
+    },
+    {
+      "var" : "Muon_pfRelIso04_all",
+      "minval" : 0,
+      "maxval" : 0.15
+    },
+    {
+      "var" : "Muon_tightId",
+      "minval" : 1,
+      "maxval" : 1
+    }
+  ],
   "Zsel":{
     "minMass":80,
     "maxMass":102
@@ -10,22 +35,21 @@
     "phi":"Muon_phi",
     "pt":"Muon_pt",
     "mass":"Muon_mass",
-    "ID":"Muon_tightId",
     "charge":"Muon_charge"
   },
   "jets":{
-    "mass":"FatJet_mass",
-    "eta":"FatJet_eta",
-    "phi":"FatJet_phi",
-    "pt":"FatJet_pt",
-    "id" : "FatJet_jetId",
-    "candidates" : "FatJetPFCands_pFCandsIdx",
-    "nConstituents" : "FatJet_nConstituents"
+    "pt":"Jet_pt",
+    "eta":"Jet_eta",
+    "phi":"Jet_phi",
+    "mass":"Jet_mass",
+    "cands":"Jet_pFCandsIdx"
   },
-  "PFCands":{
-    "mass" : "PFCands_mass",
-    "eta" : "PFCands_eta",
-    "phi" : "PFCands_phi",
-    "pt" : "PFCands_pt"
-  }
+  "pfcands":{
+    "pt":"PFCands_pt",
+    "eta":"PFCands_eta",
+    "phi":"PFCands_phi",
+    "mass":"PFCands_mass",
+    "charge":"PFCands_charge"
+  },
+  "minJetPt":30
 }
