@@ -1,6 +1,12 @@
 # EECAnalysis
 
-need python=3.9
-conda install from envlist
+Environment setup:
+
+conda create --file envlist --name EEC
+conda activate EEC
 pip install fastjet==3.3.4.0rc9 energyflow 
-install eec from source; pip tries to install non-working version 0.2.0
+git clone https://github.com/pkomiske/EnergyEnergyCorrelators.git
+cd EnergyEnergyCorrelators
+git submodule init
+git submodule update
+pip install -e .
