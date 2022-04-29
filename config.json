@@ -51,5 +51,15 @@
     "mass":"PFCands_mass",
     "charge":"PFCands_charge"
   },
-  "minJetPt":30
+  "minJetPt":30,
+  "jetSize":0.4,
+  "eec":{
+    "N":2,
+    "nBins":20,
+    "axisMin":1e-5,
+    "axisMax":1.0
+  },
+  "files":[
+    "root://cmseos.fnal.gov//store/user/lpcpfnano/cmantill/v2_2/2017/DYJetsToLL/DYJetsToLL_Pt-650ToInf_MatchEWPDG20_TuneCP5_13TeV-amcatnloFXFX-pythia8/DYJetsToLL_Pt-650ToInf/211110_223649/0000/nano_mc2017_39.root"
+  ]
 }
