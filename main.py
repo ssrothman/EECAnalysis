@@ -20,12 +20,12 @@ readCut = readCut[:-1] + ")"
 
 readCut += " & " + args.presel
 
-fileList = [f+":Events" for f in args.files]
-print(fileList)
+print(args.file)
 
 #read in uproot file
 #with uproot.open("copy.root") as f:
-data = uproot.concatenate(fileList, cut=readCut, filter_name = args.branchFilter)
+with uproot.open(args.file+":Events") as f:
+  data = f.arrays(args.branches, cut=readCut, entry_stop=args.entry_stop)
 
 print("read in file")
 
@@ -72,11 +72,12 @@ pfcands = ak.zip({
     'eta' : data[args.pfcands.eta],
     'phi' : data[args.pfcands.phi],
     'mass' : data[args.pfcands.mass],
-    'charge' : data[args.pfcands.charge]
   },
   behavior = candidate.behavior,
-  with_name = 'PtEtaPhiMCandidate'
+  with_name = 'PtEtaPhiMLorentzVector'
 )
+
+charge= data[args.pfcands.charge]
 
 #jet clustering
 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, args.jetSize)
@@ -84,13 +85,27 @@ cluster = fastjet.ClusterSequence(pfcands, jetdef)
 
 parts = cluster.constituents(args.minJetPt)
 
+#need to have the 4vector summation because ak.sum() doesn't work right for 4vecs
+jet4vec = ak.zip({
+    'x' : ak.sum(parts.x, axis=-1),
+    'y' : ak.sum(parts.y, axis=-1),
+    'z' : ak.sum(parts.z, axis=-1),
+    't' : ak.sum(parts.t, axis=-1)
+  },
+  behavior = vector.behavior,
+  with_name = 'LorentzVector'
+)
+
 #eec
 eec_ls = eec.EECLongestSide(args.eec.N, args.eec.nBins, axis_range=(args.eec.axisMin,args.eec.axisMax))
 
-jets = ak.flatten(parts, axis=1) #remove event axis
-eecInput = ak.concatenate( (jets.pt[:,:,None], jets.eta[:,:,None], jets.phi[:,:,None], jets.charge[:,:,None]), axis=2) #stack (pt, eta, phi, charge)
+flatParts= ak.flatten(parts, axis=1) #remove event axis
+#stack (pt, eta, phi, charge)
+flatParts = ak.concatenate( (flatParts.pt[:,:,None], 
+                             flatParts.eta[:,:,None], 
+                             flatParts.phi[:,:,None], 0), axis=2) 
 
-eec_ls(eecInput)
+eec_ls(flatParts)
 midbins = eec_ls.bin_centers()
 binedges = eec_ls.bin_edges()
 binwidths = np.log(binedges[1:]) - np.log(binedges[:-1])

@@ -1,5 +1,4 @@
 {
-  "branchFilter":"/Jet|PFCand|Muon/",
   "triggers":[
     "HLT_DoubleIsoMu20_eta2p1"
   ],
@@ -51,15 +50,33 @@
     "mass":"PFCands_mass",
     "charge":"PFCands_charge"
   },
-  "minJetPt":30,
+  "minJetPt":100,
   "jetSize":0.4,
   "eec":{
     "N":2,
-    "nBins":20,
+    "nBins":40,
     "axisMin":1e-5,
     "axisMax":1.0
   },
-  "files":[
-    "root://cmseos.fnal.gov//store/user/lpcpfnano/cmantill/v2_2/2017/DYJetsToLL/DYJetsToLL_Pt-650ToInf_MatchEWPDG20_TuneCP5_13TeV-amcatnloFXFX-pythia8/DYJetsToLL_Pt-650ToInf/211110_223649/0000/nano_mc2017_39.root"
+  "file":"root://cmseos.fnal.gov//store/user/lpcpfnano/jekrupa/correlation-v0/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50/220502_232409/0000/nano_mc2017_14.root",
+  "entry_stop":100000,
+  "branches":[
+    "Muon_pt",
+    "Muon_eta",
+    "Muon_phi",
+    "Muon_mass",
+    "Muon_charge",
+    "Muon_tightId",
+    "Muon_pfRelIso04_all",
+    "Jet_pt",
+    "Jet_eta",
+    "Jet_phi",
+    "Jet_mass",
+    "Jet_nConstituents",
+    "PFCands_pt",
+    "PFCands_eta",
+    "PFCands_phi",
+    "PFCands_mass",
+    "PFCands_charge"
   ]
 }
