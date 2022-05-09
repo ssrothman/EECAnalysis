@@ -30,6 +30,6 @@ jet4vec = ak.zip({
 )
 print("jetpT",jet4vec.pt)
 
-myEEC = ProjectedEEC(4, 10, 1e-5, 1)
-myEEC(jet4vec, parts)
-print(myEEC.hist)
+#myEEC = ProjectedEEC(4, 10, 1e-5, 1)
+#myEEC(jet4vec, parts)
+#print(myEEC.hist)

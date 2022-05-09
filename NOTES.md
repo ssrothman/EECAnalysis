@@ -8,6 +8,6 @@
  - Should we handle charged particles separately from neutrals (better angular res)?
 
 # TODO
- - Need to check N=3 EECs in detail to find problem 
-      maybe somewhere in the combinatorics?
+ - Need to check N=3 EECs in detail to find problem; maybe somewhere in the combinatorics?
+ - Don't need to actually compute the peak at zero I think
  - Need to profile and optimize EEC computation

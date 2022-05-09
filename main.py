@@ -114,7 +114,7 @@ hist, errs = eec_ls.get_hist_errs(0, False)
 #eec, ssrothman
 from EEC import ProjectedEEC
 myEEC = ProjectedEEC(args.eec.N, args.eec.nBins, args.eec.axisMin, args.eec.axisMax)
-myEEC(jet4vec, parts)
+myEEC(parts, jet4vec)
 myMidbins = myEEC.hist.axes[0].centers
 myBinwidths = myEEC.hist.axes[0].widths
 myHist = myEEC.hist.values()
@@ -128,7 +128,7 @@ plt.errorbar(midbins, hist/binwidths, fmt='o',lw=1.5,markersize=5, label='pkomis
 plt.errorbar(myMidbins, myHist/myBinwidths, fmt='o',lw=1.5,markersize=5, label='ssrothman')
 plt.legend()
 plt.axvline(args.jetSize, c='k')
-plt.savefig("proof.png", format='png')
+plt.savefig(args.plotFile, format='png')
 plt.show()
 
 with uproot.recreate('out.root') as f:
