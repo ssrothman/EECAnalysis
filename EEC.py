@@ -35,7 +35,7 @@ def getPartitions(n):
     y = x + y - 1
     yield a[:k + 1]
 
-class ProjectedEEC:
+class ProjectedEEC_naive:
   def __init__(self, N, bins, axisMin, axisMax):
     self.N = N
     self.hist = bh.Histogram(bh.axis.Regular(bins=bins, start=axisMin, stop=axisMax, transform=bh.axis.transform.log))
@@ -111,3 +111,91 @@ class ProjectedEEC:
     flatDR = ak.flatten(maxDR, axis=None)
     flatWt = ak.flatten(jetWt*Ewt*comboWt, axis=None)
     self.hist.fill(flatDR, weight=flatWt)
+
+class ProjectedEEC:
+  def __init__(self, N, bins, axisMin, axisMax):
+    self.N = N
+    self.hist = bh.Histogram(bh.axis.Regular(bins=bins, start=axisMin, stop=axisMax, transform=bh.axis.transform.log))
+  
+    self._precomputeSymmetry()
+  
+  def _precomputeSymmetry(self):
+    partitions = ak.Array(list(getPartitions(self.N)))
+    num = ak.num(partitions)
+
+    self._partitions = {}
+    for i in range(1,self.N+1):
+      self._partitions[i] = partitions[num==i]
+
+    numerator = self._factorial(self.N)
+    self._symFactors = {}
+    for i in range(1, self.N+1):
+      self._symFactors[i] = []
+      for partition in self._partitions[i]:
+        denominator = ak.prod(self._factorial(partition), axis=0)
+        self._symFactors[i].append(numerator/denominator)
+
+  def _factorial(self, x):
+    from ufunc.factorial.build.lib.npufunc_directory.npufunc import factorial
+    return factorial(x)
+
+  def _wt(self, parts, jets, combos, N):
+    M = len(combos.fields) #number of distinct particles in the correlator
+    print("computing weighting for M=%d..."%M)
+    t0 = time()
+
+    names = [str(i) for i in range(M)]
+
+    t1 = time()
+    #particle energy weight = product(pt_i)
+    Ewt = 0
+    for partition, symFactor in zip(self._partitions[M], self._symFactors[M]):
+      partWt = 0
+      for composition in mit.distinct_permutations(partition):
+        print("\tconsidering",composition,"...")
+        compWt = 1
+        for idx, power in enumerate(composition):
+          compWt = compWt * np.power(parts.pt[combos[names[idx]]], power)
+        partWt = partWt + compWt
+      partWt = partWt * symFactor
+      Ewt = Ewt + partWt
+    print("\tEwt took %0.3f seconds"%(time()-t1))
+
+    print("Took %0.3f seconds"%(time()-t0))
+    return Ewt
+
+  def _maxDR(self, parts, M):
+    print("Computing maxDR for M=%d..."%M)
+    t0 = time()
+    combos = ak.argcombinations(parts, M, replacement=False, axis=2)
+    print("\tMaking combos took %0.3f seconds"%(time()-t0))
+    names = [str(i) for i in range(M)]
+    pairs = ak.combinations(names, 2, replacement=False, axis=0)
+
+    t1 = time()
+    maxDR = 0
+    for pair in pairs:
+      i = combos[pair['0']]
+      j = combos[pair['1']]
+      nextDR = parts[i].delta_r(parts[j])
+      maxDR = ak.where(nextDR>maxDR, nextDR, maxDR)
+      del nextDR
+    print("\tmaking maxDR took %0.3f seconds"%(time()-t1))
+
+
+    print("Took %0.3f seconds"%(time()-t0))
+    return combos, maxDR
+
+  def __call__(self, parts, jets):
+
+    #jet energy weight
+    jetWt = np.power(jets.pt, -self.N)
+
+    for M in range(2, self.N+1):
+      combos, maxDR = self._maxDR(parts, M)
+      #combination-specific weights
+      Ewt = self._wt(parts, jets, combos, M)
+
+      flatDR = ak.flatten(maxDR, axis=None)
+      flatWt = ak.flatten(jetWt*Ewt, axis=None)
+      self.hist.fill(flatDR, weight=flatWt)

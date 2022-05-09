@@ -53,13 +53,13 @@
   "minJetPt":10,
   "jetSize":0.4,
   "eec":{
-    "N":3,
+    "N":5,
     "nBins":40,
     "axisMin":1e-5,
     "axisMax":1.0
   },
   "file":"root://cmseos.fnal.gov//store/user/lpcpfnano/jekrupa/correlation-v1/2017/DoubleMuon2017/DoubleMuon/DoubleMuon_Run2017F/220505_191004/0000/nano_data2017_2.root",
-  "plotFile":"proof3.png",
+  "plotFile":"proof5.png",
   "entry_stop":-1,
   "branches":[
     "Muon_pt",
