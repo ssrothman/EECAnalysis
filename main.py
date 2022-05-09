@@ -96,7 +96,7 @@ jet4vec = ak.zip({
   with_name = 'LorentzVector'
 )
 
-#eec
+#eec, pkomiske
 eec_ls = eec.EECLongestSide(args.eec.N, args.eec.nBins, axis_range=(args.eec.axisMin,args.eec.axisMax))
 
 flatParts= ak.flatten(parts, axis=1) #remove event axis
@@ -108,16 +108,25 @@ flatParts = ak.concatenate( (flatParts.pt[:,:,None],
 eec_ls(flatParts)
 midbins = eec_ls.bin_centers()
 binedges = eec_ls.bin_edges()
-binwidths = np.log(binedges[1:]) - np.log(binedges[:-1])
+binwidths = (binedges[1:]) - (binedges[:-1])
 hist, errs = eec_ls.get_hist_errs(0, False)
+
+#eec, ssrothman
+from EEC import ProjectedEEC
+myEEC = ProjectedEEC(args.eec.N, args.eec.nBins, args.eec.axisMin, args.eec.axisMax)
+myEEC(jet4vec, parts)
+myMidbins = myEEC.hist.axes[0].centers
+myBinwidths = myEEC.hist.axes[0].widths
+myHist = myEEC.hist.values()
+
 plt.xscale('log')
 plt.yscale('log')
 plt.xlabel('$\Delta R$')
+plt.ylim(1e-1,1e5)
 plt.ylabel("Projected %d-point correlator"%args.eec.N)
-plt.errorbar(midbins, hist/binwidths, 
-               xerr=(midbins - binedges[:-1], binedges[1:] - midbins),
-               yerr=errs/binwidths, 
-               fmt='o',lw=1.5,capsize=1.5,capthick=1,markersize=1.5)
+plt.errorbar(midbins, hist/binwidths, fmt='o',lw=1.5,markersize=5, label='pkomiske')
+plt.errorbar(myMidbins, myHist/myBinwidths, fmt='o',lw=1.5,markersize=5, label='ssrothman')
+plt.legend()
 plt.axvline(args.jetSize, c='k')
 plt.savefig("proof.png", format='png')
 plt.show()
@@ -125,4 +134,3 @@ plt.show()
 with uproot.recreate('out.root') as f:
   f['eec_hist'] = hist,binedges
   f['eec_errs'] = errs,binedges
-
