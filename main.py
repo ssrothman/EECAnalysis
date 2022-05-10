@@ -96,13 +96,6 @@ jet4vec = ak.zip({
   with_name = 'LorentzVector'
 )
 
-from scipy.special import comb
-print("N\tNcombos")
-for N in range(7):
-  z = ak.sum(comb(ak.num(parts), N))
-  print("%d\t%d"%(N, z))
-
-'''
 #eec, pkomiske
 eec_ls = eec.EECLongestSide(args.eec.N, args.eec.nBins, axis_range=(args.eec.axisMin,args.eec.axisMax))
 
@@ -141,4 +134,3 @@ plt.show()
 with uproot.recreate('out.root') as f:
   f['eec_hist'] = hist,binedges
   f['eec_errs'] = errs,binedges
-'''
