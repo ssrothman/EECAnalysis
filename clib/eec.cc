@@ -11,26 +11,43 @@
 #include <stdint.h>
 #include <algorithm>
 
+#include "eec.h"
+
+//#define VERBOSE
+
 //TODO: think carefully about datatype size
 //      Things probably don't need to be full width
 //      idx_t needs to be larger than max nParts**2
-typedef uint16_t idx_t;
-typedef float coord_t;
-typedef std::tuple<idx_t,idx_t> pair;
+
+size_t fact(idx_t n){
+  size_t result=1;
+  for(idx_t i=2;i<n+1;++i){
+    result*=i;
+  }
+  return result;
+}
 
 void printOrd(const std::vector<idx_t> ord){
+#ifdef VERBOSE
   std::cout << "(";
   idx_t i =0;
   for(i=0; i<ord.size()-1; ++i){
     std::cout << ord[i] << ", ";
   }
   std::cout << ord[ord.size()-1] << ")";
+#endif
 }
 
-void part2(int n, std::vector<std::vector<std::vector<int>>>& out){
-  int a[n+1];
-  int k, y, x, l;
-  for(int q=0; q<n+1; ++q){
+void fillCompositions(const idx_t n, comp_t& out){
+  out.clear();
+  for(idx_t i=0; i<n; ++i){
+    std::vector<std::vector<idx_t>> next;
+    out.push_back(next);
+  }
+
+  idx_t a[n+1];
+  idx_t k, y, x, l;
+  for(idx_t q=0; q<n+1; ++q){
     a[q] = 0;
   }
   k = 1;
@@ -49,9 +66,9 @@ void part2(int n, std::vector<std::vector<std::vector<int>>>& out){
       a[l] = y;
       //yield a[:k + 2];
       do{
-        std::vector<int> next;
+        std::vector<idx_t> next;
         next.reserve(k+1);
-        for(int q=0; q<k+2; ++q){
+        for(idx_t q=0; q<k+2; ++q){
           next.push_back(a[q]);
         } 
         out[k+1].push_back(next);
@@ -63,9 +80,9 @@ void part2(int n, std::vector<std::vector<std::vector<int>>>& out){
     y = x + y - 1;
     //yield a[:k + 1];
     do{
-      std::vector<int> next;
+      std::vector<idx_t> next;
       next.reserve(k);
-      for(int q=0; q<k+1; ++q){
+      for(idx_t q=0; q<k+1; ++q){
         next.push_back(a[q]);
       } 
       out[k].push_back(next);
@@ -73,18 +90,39 @@ void part2(int n, std::vector<std::vector<std::vector<int>>>& out){
   }
 }
 
-size_t fact(idx_t n){
-  size_t result=1;
-  for(idx_t i=2;i<n+1;++i){
-    result*=i;
-  }
-  return result;
+void fillSymFactors(const idx_t N, const comp_t& compositions, factor_t& out){
+  out.clear();
+  out.reserve(N);
+  size_t factN = fact(N);
+  size_t nextFactor;
+  for(idx_t i=0; i<N; ++i){//for each possible length of composition
+    std::vector<idx_t> next;
+    next.reserve(compositions[i].size());
+    for(idx_t j=0; j<compositions[i].size(); ++j){//for each composition of that length
+      nextFactor = fact(N);
+      for(idx_t k=0; k<compositions[i][j].size(); ++k){//for each int in that composition
+        nextFactor/=fact(compositions[i][j][k]);
+      }//end loop over individual composition
+      next.push_back(nextFactor);
+    }//end loop over compositions of a given length
+    out.push_back(next);
+  }//end loop over composition length
 }
 
 size_t intPow(idx_t a, idx_t b){
   //mine, very stupid
   //should be upgraded to to square multiply
   size_t result=1;
+  for(idx_t i=0; i<b; ++i){
+    result*=a;
+  }
+  return result; 
+}
+
+coord_t intPow(coord_t a, idx_t b){
+  //mine, very stupid
+  //should be upgraded to to square multiply
+  coord_t result=1;
   for(idx_t i=0; i<b; ++i){
     result*=a;
   }
@@ -167,7 +205,7 @@ coord_t dR2(coord_t eta1, coord_t phi1, coord_t eta2, coord_t phi2){
   return deta*deta + dphi*dphi;
 }
 
-void fillDR2(const coord_t jet[][3], const idx_t nPart, 
+void fillDR2(const coord_t* const jet, const idx_t nPart, 
                std::vector<coord_t>& dRs){
   /*
    *  Compute the pairwise delta r^2 between all the particles in the jet
@@ -179,33 +217,50 @@ void fillDR2(const coord_t jet[][3], const idx_t nPart,
   idx_t i, j, n=0;
   for(i=0;i<nPart-1;++i){
     for(j=i+1;j<nPart;++j){
-      dRs[n++] = dR2(jet[i][1], jet[i][2], jet[j][1], jet[j][2]);
+      dRs[n++] = dR2(jet[3*i+1], jet[3*i+2], jet[3*j+1], jet[3*j+2]);
     }
   }
 }
 
-coord_t getWt(const coord_t jet[][3], const idx_t nPart, const idx_t N,
-                  const std::vector<idx_t>& ord, const idx_t M){
-  coord_t result = fact(M);
-  for(idx_t i=0; i<M; ++i){
-    result*=jet[ord[i]][0];
-  }
+coord_t getWt(const coord_t* const jet, const idx_t nPart, const idx_t N,
+                  const std::vector<idx_t>& ord, const idx_t M,
+                  const comp_t& compositions, const factor_t& symFactors){
+#ifdef VERBOSE
+  std::cout << std::endl;
+  std::cout << "Getting weight for ";
+  printOrd(ord);
+  std::cout << std::endl;
+#endif
+  coord_t result = 0;
+  for(idx_t i=0; i<compositions[M-1].size(); ++i){ //for each composition
+#ifdef VERBOSE
+    std::cout << "\tComposition ";
+    printOrd(compositions[M-1][i]);
+    std::cout << std::endl;
+#endif 
+    coord_t nextWt = symFactors[M-1][i];
+    for(idx_t j=0; j<compositions[M-1][i].size(); ++j){ //for each element
+      nextWt*=intPow(jet[3*ord[j]+0], compositions[M-1][i][j]);
+    } //end for each element
+    result += nextWt;
+  }//end for each composition
   
   return result;
 }
 
-coord_t getWt(const coord_t jet[][3], const idx_t nPart, const idx_t N,
+coord_t getWt(const coord_t* const jet, const idx_t nPart, const idx_t N,
                   const idx_t i, const idx_t j, const idx_t M){
-  return 2*jet[i][0]*jet[j][0];
+  return 2*jet[3*i+0]*jet[3*j+0];
 }
 
 
-void doM(const coord_t jet[][3], const idx_t nPart, const idx_t N, 
+void doM(const coord_t* const jet, const idx_t nPart, const idx_t N, 
           const idx_t M,
           const std::vector<coord_t>& dRs, 
-          const std::vector<idx_t>& cache, const idx_t L,
-          std::vector<coord_t>& wts, std::vector<idx_t>& newCache,
-          bool fillCache){
+          const comp_t& compositions, const factor_t& symFactors,
+          const std::vector<idx_t>* const cache, const idx_t L,
+          std::vector<idx_t>* newCache,
+          std::vector<coord_t>& wts){
   /*
    * Compute the weights for correlators with M distinct particles
    * 
@@ -214,18 +269,22 @@ void doM(const coord_t jet[][3], const idx_t nPart, const idx_t N,
    * N: correlator order
    * M: number of distinct particles in the correlator
    * dRs: array of pairwise dRs
-   * cache: indices from computation L<M
+   * compositions: compositions[M] = the M-fold compositions of N. Needed by getWt()
+   * cache: indices from previous computation L<M
+   *    Pointer instead of ref to allow passing nullptr when N<=2
    * L: number of distinct particles in cache
-   * wts: vector to add weights to
    * newCache: vector in which to store the new cache indices
-   * fillCache: if true, fill newCache. else ignore newCache
+   *    Pointer instead of ref to allow passing nullptr if you don't want a newCache
+   * wts: vector to add weights to
    */
 
+#ifdef VERBOSE
   std::cout << "doing " << M << "..." << std::endl;
+#endif
 
   //setup new cache
-  if(fillCache)
-    newCache.resize(intPow(nPart, M));
+  if(newCache)
+    newCache->resize(intPow(nPart, M));
   
   idx_t i, j, idx;
   if(M==2){ 
@@ -238,15 +297,21 @@ void doM(const coord_t jet[][3], const idx_t nPart, const idx_t N,
     for(i=0;i<nPart-1;++i){
       for(j=i+1;j<nPart;++j){
         wts[idx] += getWt(jet, nPart, N, i, j, M);
-        if(fillCache)
-          newCache[i + nPart*j] = idx;
+        if(newCache)
+          (*newCache)[i + nPart*j] = idx;
+#ifdef VERBOSE
         std::cout << "(" << i << ", " << j << ") " << sqrt(dRs[idx]) << std::endl;
+#endif
         ++idx;
       } //end for j
     } // end for i
   } // end if M==2
   else {
     //looping over arbitrary dimensions is complicated...
+    if(!cache){
+      std::cerr << "Error: cache can only be nullptr when M==2" << std::endl;
+      return;
+    }
     size_t maxIter = choose(nPart,M);
     std::vector<idx_t> ord(M); //which M-fold combination?
     for(i=0; i<M; ++i){
@@ -265,7 +330,7 @@ void doM(const coord_t jet[][3], const idx_t nPart, const idx_t N,
         for(i=0; i<L; ++i){
           sub[i] = ord[ordL[i]];
         }
-        idx = cache[getIndex(sub, nPart)];//get cached index
+        idx = (*cache)[getIndex(sub, nPart)];//get cached index
         if(dRs[idx]>bestDR){
           bestIdx=idx;
           bestDR=dRs[idx];
@@ -273,14 +338,16 @@ void doM(const coord_t jet[][3], const idx_t nPart, const idx_t N,
         iterate(L, ordL, M);
       }//end iterate over L-fold combnations. We should now have identified the maxDR
 
+      float newWt = getWt(jet, nPart, N, ord, M, compositions, symFactors);
+#ifdef VERBOSE
       printOrd(ord);
-      float newWt = getWt(jet, nPart, N, ord, M);
       std::cout << ":" << std::endl 
         << "\tdR: " << sqrt(dRs[bestIdx]) << std::endl 
         << "\twt: " << newWt << std::endl;
+#endif
       wts[bestIdx] += newWt; //placeholder wts call
-      if(fillCache)
-        newCache[getIndex(ord, nPart)] = bestIdx;
+      if(newCache)
+        (*newCache)[getIndex(ord, nPart)] = bestIdx;
       iterate(M, ord, nPart);
     }
   }
@@ -288,7 +355,7 @@ void doM(const coord_t jet[][3], const idx_t nPart, const idx_t N,
 
 //does jet[][3] pass by pointer? by reference? I hope to god it isn't a copy
 //This will eventually be wrapped in something so I won't stress about it now
-void eec_onejet(const coord_t jet[][3], idx_t nPart, idx_t N){
+void eec_onejet(float* jet, int nPart, int nFeat, int N){
   /*
    * Compute EEC for one jet
    * 
@@ -298,12 +365,10 @@ void eec_onejet(const coord_t jet[][3], idx_t nPart, idx_t N){
    *
    * assumes pT has already been normalized by the jet pT
    */
-  //there are never actually more than nPart choose 2 different delta rs at any order
-  //TODO: clever wrapper class that handles indexing for you
-  //TODO: only store upper triangle (excluding diagonal)
-  //We can just incrememt the wt for each dR value as appropriate
-  
-  size_t nPart2 = nPart*nPart;
+  if(nFeat!=3){
+    std::cerr << "Error: nFeat must be 3" << std::endl;
+    return;
+  }
   
   idx_t nDR = choose(nPart, 2);
 
@@ -313,17 +378,38 @@ void eec_onejet(const coord_t jet[][3], idx_t nPart, idx_t N){
   //fill dR vector
   fillDR2(jet, nPart, dRs);
 
-  std::vector<idx_t> cache(nPart2, 0);
+  comp_t compositions;
+  fillCompositions(N, compositions);
 
-  doM(jet, nPart, N, 2, dRs, cache, 0, wts, cache, true);
-  doM(jet, nPart, N, 3, dRs, cache, 2, wts, cache, false);
-  doM(jet, nPart, N, 4, dRs, cache, 2, wts, cache, false);
-  doM(jet, nPart, N, 5, dRs, cache, 2, wts, cache, false);
+  factor_t symFactors;
+  fillSymFactors(N, compositions, symFactors);
 
+#ifdef VERBOSE
+  std::cout<<std::endl;
+  for(int i=0; i<N; ++i){
+    std::cout << "Compositions of length " << i+1 << std::endl;
+    for(int j=0;j<compositions[i].size();++j){
+      std::cout << "\t";
+      printOrd(compositions[i][j]);
+      std::cout << " " << symFactors[i][j] << std::endl;
+    }
+  }
+  std::cout<<std::endl;
+#endif
+
+  std::vector<idx_t> cache(intPow((idx_t)nPart,2), 0);
+
+  doM(jet, nPart, N, 2, dRs, compositions, symFactors, nullptr, 0, &cache, wts);
+  for(idx_t M=3; M<=N; ++M){
+    doM(jet, nPart, N, M, dRs, compositions, symFactors, &cache, 2, nullptr, wts);
+  }
+
+#ifdef VERBOSE
   std::cout<<std::endl<<"dR\twt"<<std::endl;
   for(idx_t i=0; i<nDR; ++i){
     std::cout << sqrt(dRs[i]) << ",\t" << wts[i] << std::endl;
   }
+#endif
 
   /*
    * Plan:
@@ -343,40 +429,6 @@ void eec_onejet(const coord_t jet[][3], idx_t nPart, idx_t N){
    *    
    */
 
-  /* One non-cacheing strategy:
-   *    Priority queue of L-wise dRs
-   *      If (L-tuple) in (M-tuple): O(M) opperation because they're both sorted
-   *        stop, we're done 
-   *      Else:
-   *        onto next in priority queue 
-   * Worst case complexity is O((nPart choose L) * M) 
-   *    Want L as small as possible????
-   * Larger L makes best case more likely
-   *    Probably need to do experiment to learn impact on average complexity
-   *
-   *  This maybe could be refined with a tree
-   */
-
-  /*
-   * Another non-cacheing strategy:
-   *    Direct identification of which L-tuples to look at
-   *    In general this is hard
-   *    If M < 2L this is easy: they are:
-   *      x[0:L], x[M-L:] and (x[i:i+L-1], x[-1]) for i in range(L-1))
-   *      Complexity is (M-L+2)
-   *      Obv want L as large as possible. If L_cap=5, can go to 9th order correlators
-   *
-   *
-   *    That was stupid. It's just the collection of (M choose L) combinations
-   *    This is 100% the thing to do
-   */
-
-  /*
-   * Lets write a function that you pass the cache and the cache size (L) to
-   * Keep it completely general
-   * The wrapping function can decide when to stop caching
-   */
-
   /*
    * Food for thought: 
    *  might as well compute all lower order correlators while we're at it?
@@ -384,47 +436,29 @@ void eec_onejet(const coord_t jet[][3], idx_t nPart, idx_t N){
    */
 }
 
+/*
 int main(){
+  coord_t jet[15];
+  jet[3*0+0] = 1.0;
+  jet[3*1+0] = 2.0;
+  jet[3*2+0] = 0.5;
+  jet[3*3+0] = 2.0;
+  jet[3*4+0] = 3.0;
 
-  int N=5;
-  std::vector<std::vector<std::vector<int>>> partitions;
-  for(int i=0; i<N; ++i){
-    std::vector<std::vector<int>> next;
-    partitions.push_back(next);
-  }
-  part2(N, partitions);
-  std::cout<<std::endl<<std::endl;
-  for(int i=0; i<N; ++i){
-    std::cout << "Partitions with length " << i+1 << std::endl;
-    for(int j=0; j<partitions[i].size(); ++j){
-      for(int k=0; k<partitions[i][j].size(); ++k){
-        std::cout << partitions[i][j][k] << ", ";
-      }
-      std::cout << std::endl;
-    }
-  }
-  std::cout<<"done with partitions"<<std::endl<<std::endl;
+  jet[3*0+1] = 0.0;
+  jet[3*1+1] = 0.1;
+  jet[3*2+1] = 0.4;
+  jet[3*3+1] = 1.0;
+  jet[3*4+1] = 0.4;
 
-  coord_t jet[5][3];
-  jet[0][0] = 1.0;
-  jet[1][0] = 2.0;
-  jet[2][0] = 0.5;
-  jet[3][0] = 2.0;
-  jet[4][0] = 3.0;
+  jet[3*0+2] = 0.0;
+  jet[3*1+2] = 0.2;
+  jet[3*2+2] = 0.4;
+  jet[3*3+2] = 0.0;
+  jet[3*4+2] = -0.5;
 
-  jet[0][1] = 0.0;
-  jet[1][1] = 0.1;
-  jet[2][1] = 0.4;
-  jet[3][1] = 1.0;
-  jet[4][1] = 0.4;
-
-  jet[0][2] = 0.0;
-  jet[1][2] = 0.2;
-  jet[2][2] = 0.4;
-  jet[3][2] = 0.0;
-  jet[4][2] = -0.5;
-
-  eec_onejet(jet, 5, 2);
+  eec_onejet(jet, 5, 3, 5);
 
   return 0;
 }
+*/
