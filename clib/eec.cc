@@ -99,7 +99,7 @@ void fillSymFactors(const idx_t N, const comp_t& compositions, factor_t& out){
     std::vector<idx_t> next;
     next.reserve(compositions[i].size());
     for(idx_t j=0; j<compositions[i].size(); ++j){//for each composition of that length
-      nextFactor = fact(N);
+      nextFactor = factN;
       for(idx_t k=0; k<compositions[i][j].size(); ++k){//for each int in that composition
         nextFactor/=fact(compositions[i][j][k]);
       }//end loop over individual composition
@@ -206,7 +206,7 @@ coord_t dR2(coord_t eta1, coord_t phi1, coord_t eta2, coord_t phi2){
 }
 
 void fillDR2(const coord_t* const jet, const idx_t nPart, 
-               std::vector<coord_t>& dRs){
+               coord_t* dRs){
   /*
    *  Compute the pairwise delta r^2 between all the particles in the jet
    *  
@@ -218,6 +218,10 @@ void fillDR2(const coord_t* const jet, const idx_t nPart,
   for(i=0;i<nPart-1;++i){
     for(j=i+1;j<nPart;++j){
       dRs[n++] = dR2(jet[3*i+1], jet[3*i+2], jet[3*j+1], jet[3*j+2]);
+#ifdef VERBOSE
+      std::cout << n-1 << "dR2 (" << jet[3*i+1] << ", " <<  jet[3*i+2] << ") X (" 
+        << jet[3*j+1] << ", " << jet[3*j+2] << "): " << dRs[n-1] << std::endl;
+#endif
     }
   }
 }
@@ -256,11 +260,11 @@ coord_t getWt(const coord_t* const jet, const idx_t nPart, const idx_t N,
 
 void doM(const coord_t* const jet, const idx_t nPart, const idx_t N, 
           const idx_t M,
-          const std::vector<coord_t>& dRs, 
+          coord_t *dRs, 
           const comp_t& compositions, const factor_t& symFactors,
           const std::vector<idx_t>* const cache, const idx_t L,
           std::vector<idx_t>* newCache,
-          std::vector<coord_t>& wts){
+          coord_t *wts){
   /*
    * Compute the weights for correlators with M distinct particles
    * 
@@ -353,9 +357,9 @@ void doM(const coord_t* const jet, const idx_t nPart, const idx_t N,
   }
 }
 
-//does jet[][3] pass by pointer? by reference? I hope to god it isn't a copy
-//This will eventually be wrapped in something so I won't stress about it now
-void eec_onejet(float* jet, int nPart, int nFeat, int N){
+void eec_onejet(float* jet, int nPart, int nFeat, int N,
+                float* dRs, int nDR,
+                float* wts, int nWT){
   /*
    * Compute EEC for one jet
    * 
@@ -369,14 +373,24 @@ void eec_onejet(float* jet, int nPart, int nFeat, int N){
     std::cerr << "Error: nFeat must be 3" << std::endl;
     return;
   }
-  
-  idx_t nDR = choose(nPart, 2);
 
-  std::vector<coord_t> dRs(nDR, -1.0); 
-  std::vector<coord_t> wts(nDR, 0.0);
+#ifdef VERBOSE
+  std::cout << "doing a jet with " << nPart << " particles, the first of which has pT " << jet[0] << std::endl;
+#endif
+  
+  if(nDR!=nWT || nDR!=choose(nPart, 2)){
+    std::cerr << "Error: must have len(dRs) == len(wts) == nPart choose 2" << std::endl;
+    return;
+  }
+  //std::vector<coord_t> dRs(nDR, -1.0); 
+  //std::vector<coord_t> wts(nDR, 0.0);
 
   //fill dR vector
   fillDR2(jet, nPart, dRs);
+
+  for(size_t i=0; i<nDR; ++i){
+    wts[i] = 0;
+  }
 
   comp_t compositions;
   fillCompositions(N, compositions);
@@ -410,6 +424,11 @@ void eec_onejet(float* jet, int nPart, int nFeat, int N){
     std::cout << sqrt(dRs[i]) << ",\t" << wts[i] << std::endl;
   }
 #endif
+  for(idx_t i=0; i<nDR; ++i){
+    if(abs(wts[i])>1e10){
+      std::cout <<"found a bad one"<<std::endl<<std::endl;
+    }
+  }
 
   /*
    * Plan:
@@ -434,6 +453,41 @@ void eec_onejet(float* jet, int nPart, int nFeat, int N){
    *  might as well compute all lower order correlators while we're at it?
    *  Histograms are very memory-efficient
    */
+
+  /*
+   * Probably most efficient to pass in pT, eta, phi individually 
+   * rather than stacking them
+   */
+}
+
+void eec(float* jets, int nPartTot, int nFeat,
+          int* jetIdxs, int nJets,
+          int N,
+          float* dRs, int nDRTot,
+          float* wts, int nWTTot,
+          int* dRIdxs, int nDRIdxs){
+  //TODO: need some size checks for everything else too
+  if(nFeat!=3){
+    std::cerr << "Error: nFeat must be 3" << std::endl;
+    return;
+  }
+  for(size_t i=0; i<nDRTot; ++i){
+    wts[i]=0;
+    dRs[i]=0;
+  }
+
+
+  size_t prevJetIdx = 0, prevDRIdx = 0;
+  idx_t nPart, nDR;
+  for(size_t i=0; i<nJets; ++i){
+    nPart = jetIdxs[i] - prevJetIdx;
+    nDR = dRIdxs[i] - prevDRIdx;
+    eec_onejet(&jets[3*prevJetIdx], nPart, nFeat, N, 
+                &dRs[prevDRIdx], nDR, 
+                &wts[prevDRIdx], nDR);
+    prevJetIdx = jetIdxs[i];
+    prevDRIdx = dRIdxs[i];
+  }
 }
 
 /*

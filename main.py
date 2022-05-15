@@ -5,8 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from types import SimpleNamespace
 from coffea.nanoevents.methods import vector, candidate
+from time import time
 import eec
 import fastjet
+from scipy.special import comb
 
 #read in json config
 with open("config.json", 'r') as f:
@@ -96,6 +98,7 @@ jet4vec = ak.zip({
   with_name = 'LorentzVector'
 )
 
+t0 = time()
 #eec, pkomiske
 eec_ls = eec.EECLongestSide(args.eec.N, args.eec.nBins, axis_range=(args.eec.axisMin,args.eec.axisMax))
 
@@ -104,8 +107,10 @@ flatParts= ak.flatten(parts, axis=1) #remove event axis
 flatParts = ak.concatenate( (flatParts.pt[:,:,None], 
                              flatParts.eta[:,:,None], 
                              flatParts.phi[:,:,None], 0), axis=2) 
-
+print("setting up eec inputs took %0.3f seconds"%(time()-t0))
+t9 = time()
 eec_ls(flatParts)
+print("running eec_ls took %0.3f seconds"%(time()-t0))
 midbins = eec_ls.bin_centers()
 binedges = eec_ls.bin_edges()
 binwidths = (binedges[1:]) - (binedges[:-1])
@@ -119,13 +124,41 @@ myMidbins = myEEC.hist.axes[0].centers
 myBinwidths = myEEC.hist.axes[0].widths
 myHist = myEEC.hist.values()
 
+#eec_cpp, srothman
+import eec_cpp
+t0 = time()
+pts = np.asarray(ak.flatten(parts.pt/jet4vec.pt, axis=None)).astype(np.float32)
+etas = np.asarray(ak.flatten(parts.eta, axis=None)).astype(np.float32)
+phis = np.asarray(ak.flatten(parts.phi, axis=None)).astype(np.float32)
+nJets = np.asarray(ak.flatten(ak.num(parts,axis=-1), axis=None)).astype(np.int32)
+jetIdxs = np.cumsum(nJets).astype(np.int32)
+nDRs = comb(nJets, 2)
+dRIdxs = np.cumsum(nDRs).astype(np.int32)
+nDR = int(dRIdxs[-1])
+print("seting up inputs for eec_cpp took %0.3f seconds"%(time()-t0))
+t0 = time()
+jets = np.column_stack((pts, etas, phis))
+dRs, wts = eec_cpp.eec(jets, jetIdxs, args.eec.N, nDR, nDR, dRIdxs)
+dRs = np.sqrt(dRs)
+print("computing dRs with eec_cpp took %0.3f seconds"%(time()-t0))
+
+import boost_histogram as bh
+cpphist = bh.Histogram(bh.axis.Regular(args.eec.nBins, start=args.eec.axisMin, stop=args.eec.axisMax, transform=bh.axis.transform.log))
+t0 = time()
+cpphist.fill(dRs, weight=wts)
+print("filling histogram with cpp values took %0.3f seconds"%(time()-t0))
+cppMidbins = cpphist.axes[0].centers
+cppBinwidths = cpphist.axes[0].widths
+cppHist = cpphist.values()
+
 plt.xscale('log')
 plt.yscale('log')
 plt.xlabel('$\Delta R$')
-plt.ylim(1e-1,1e5)
+#plt.ylim(1e-1,1e5)
 plt.ylabel("Projected %d-point correlator"%args.eec.N)
 plt.errorbar(midbins, hist/binwidths, fmt='o',lw=1.5,markersize=5, label='pkomiske')
-plt.errorbar(myMidbins, myHist/myBinwidths, fmt='o',lw=1.5,markersize=5, label='ssrothman')
+plt.errorbar(myMidbins*1.1, myHist/myBinwidths, fmt='o',lw=1.5,markersize=5, label='ssrothman')
+plt.errorbar(cppMidbins*1.2, cppHist/cppBinwidths, fmt='o',lw=1.5,markersize=5, label='ssrothman, cpp')
 plt.legend()
 plt.axvline(args.jetSize, c='k')
 plt.savefig(args.plotFile, format='png')

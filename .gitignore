@@ -4,3 +4,8 @@
 ufunc/factorial/build/*
 *.png
 __pycache__/*
+*.so
+clib/learn_swig/*
+clib/__pycache__/*
+clib/*.py
+clib/eec_wrap.cc
