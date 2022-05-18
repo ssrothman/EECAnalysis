@@ -15,22 +15,22 @@ except AttributeError:
 
 import subprocess
 
-command = 'swig -python -c++ -fastproxy -keyword -py3 -o eec_wrap.cc eec.i'
+command = 'swig -python -c++ -fastproxy -keyword -py3 -o eec_back_wrap.cc eec_back.i'
 print(command)
 subprocess.run(command.split())
 
-# eec extension module
-_eec = Extension("_eec",
-                   ["eec_wrap.cc", "eec.cc"],
+# eec_back extension module
+_eec_back = Extension("_eec_back",
+                   ["eec_back_wrap.cc", "eec_back.cc"],
                    include_dirs = [numpy_include],
                    libraries=['stdc++', 'm'],
                    extra_compile_args=['-std=c++14']
                    )
 
-# eec setup
+# eec_back setup
 setup(  name        = "energy-energy correlators",
         description = "tbd",
         author      = "Simon Rothman",
         version     = "0.0",
-        ext_modules = [_eec]
+        ext_modules = [_eec_back]
         )
