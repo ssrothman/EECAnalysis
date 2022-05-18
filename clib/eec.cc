@@ -219,7 +219,7 @@ void fillDR2(const coord_t* const jet, const idx_t nPart,
     for(j=i+1;j<nPart;++j){
       dRs[n++] = dR2(jet[3*i+1], jet[3*i+2], jet[3*j+1], jet[3*j+2]);
 #ifdef VERBOSE
-      std::cout << n-1 << "dR2 (" << jet[3*i+1] << ", " <<  jet[3*i+2] << ") X (" 
+      std::cout << n-1 << ": dR2 (" << jet[3*i+1] << ", " <<  jet[3*i+2] << ") X (" 
         << jet[3*j+1] << ", " << jet[3*j+2] << "): " << dRs[n-1] << std::endl;
 #endif
     }
@@ -253,8 +253,12 @@ coord_t getWt(const coord_t* const jet, const idx_t nPart, const idx_t N,
 }
 
 coord_t getWt(const coord_t* const jet, const idx_t nPart, const idx_t N,
-                  const idx_t i, const idx_t j, const idx_t M){
-  return 2*jet[3*i+0]*jet[3*j+0];
+                  const idx_t i, const idx_t j, const idx_t M,
+                  const comp_t& compositions, const factor_t& symFactors){
+  std::vector<idx_t> ord;
+  ord.push_back(i);
+  ord.push_back(j);
+  return getWt(jet, nPart, N, ord, 2, compositions, symFactors);
 }
 
 
@@ -300,11 +304,13 @@ void doM(const coord_t* const jet, const idx_t nPart, const idx_t N,
     idx = 0;
     for(i=0;i<nPart-1;++i){
       for(j=i+1;j<nPart;++j){
-        wts[idx] += getWt(jet, nPart, N, i, j, M);
+        wts[idx] += getWt(jet, nPart, N, i, j, M, compositions, symFactors);
         if(newCache)
           (*newCache)[i + nPart*j] = idx;
 #ifdef VERBOSE
-        std::cout << "(" << i << ", " << j << ") " << sqrt(dRs[idx]) << std::endl;
+        std::cout << "(" << i << ", " << j << ") " << std::endl
+          << "\tdR: " << sqrt(dRs[idx]) << std::endl
+          << "\twt: " << wts[idx] << std::endl;
 #endif
         ++idx;
       } //end for j
