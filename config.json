@@ -60,7 +60,7 @@
   },
   "file":"root://cmseos.fnal.gov//store/user/lpcpfnano/jekrupa/correlation-v1/2017/DoubleMuon2017/DoubleMuon/DoubleMuon_Run2017F/220505_191004/0000/nano_data2017_2.root",
   "plotFile":"proof3.png",
-  "entry_stop":-1,
+  "entry_stop":100,
   "branches":[
     "Muon_pt",
     "Muon_eta",

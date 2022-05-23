@@ -5,7 +5,7 @@ M = [[[0, 0, 0, 0, 1], [0,0,0]], [[0,0,0]]]
 
 import awkward as ak
 import numpy as np
-from EEC import ProjectedEEC
+from pythonlib.EEC import ProjectedEEC
 from coffea.nanoevents.methods import vector
 from scipy.special import comb
 
