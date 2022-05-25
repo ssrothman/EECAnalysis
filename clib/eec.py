@@ -1,4 +1,7 @@
-from . import eec_back as backend
+if __package__ or "." in __name__:
+  from . import eec_back as backend
+else:
+  import eec_back as backend
 import awkward as ak
 import numpy as np
 from scipy.special import comb
@@ -114,7 +117,7 @@ class ProjectedEEC:
     return self
 
   def __mul__(self, other):
-    if not isinstance(other, numbers.Number):
+    if not isinstance(other, Number):
       return NotImplemented
 
     return ProjectedEEC(self.N, hist=self.hist*other)
@@ -123,7 +126,7 @@ class ProjectedEEC:
     return self * other
 
   def __imul__(self, other):
-    if not isinstance(other, numbers.Number):
+    if not isinstance(other, Number):
       return NotImplemented
 
     self.hist *= other
