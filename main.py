@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from types import SimpleNamespace
 from coffea.nanoevents.methods import vector, candidate
 from time import time
-import eec
 import fastjet
 from scipy.special import comb
 

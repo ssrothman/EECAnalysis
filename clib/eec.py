@@ -14,44 +14,53 @@ class ProjectedEEC:
   Wrapper class for c++ backend computing energy-energy correlators (EECs) 
   Correlators of higher order than 2 are project onto the longest side of the N-simplex
 
-  Recommended usage is to construct with at least one axis, in which case 
-  a boost_histogram object is used to bin the correlators in dR, and optionally
-  any other variables you care to pass.
+  If you want to bin, pass at least one axis. A boost_histogram object will then
+  be used to bin the correlators in dR, and optionally any other variables you care to pass.
 
   If you are binning with respect to additional variables, just pass them 
   to __call__() in the same order as you listed their axes. They will 
   automagically be broadcasted to the right shapes and filled into the histogram
 
-  If you are binning, addition and multiplication have been overloaded to 
-  allow sensible addition of two ProjectedEEC objects and multiplication 
-  by scalars
+  If you don't want to bin, don't pass any axes and we will instead store an array
+  of dRs and weights. 
 
-  If axes is None, this wrapper will instead store the dR and weight arrays
-  with no binning. The overloaded arithmetic operators may not behave properly 
-  in this case.
+  Addition and multiplication, and division have been overloaded. Addition adds 
+  histograms, or concatenates dR and weight lists, while multiplication transforms
+  weights. 
 
   Examples:
 
   #bin only with respect to dR:
   eec = ProjectedEEC(3, axes = [bh.axis.Regular(bins=75, start=1e-5, stop=1.0, transform=bh.axis.transform.log)])
   eec(particles, jets)
-  print(eec.hist)
+  histogram = eec.hist
 
   #bin also with respect to jet pT and eta:
   eec = ProjectedEEC(3, axes = [bh.axis.Regular(bins=75, start=1e-5, stop=1.0, transform=bh.axis.transform.log), bh.axis.Regular(bins=10, start=10, end=500), bh.axis.Regular(bins=10, start=-5, end=5)])
   eec(particles, jets, jets.pt, jets.eta)
+  histogram = eec.hist
+
+  #don't bin at all
+  eec = ProjectedEEC(3)
+  dRs = eec.dRs
+  wts = eec.wts
   '''
 
-  def __init__(self, N, axes=None, hist=None):
+  def __init__(self, N, axes=None, hist=None, dRs=None, wts=None):
     '''
     N: correlator order
+      Must be >= 2
     axes: list of bh.axis objects to bin along
       If axes is None, don't bin and instead just store the dR and weight arrays
       If axies is not None, the first axis is the dR axis, 
         and any additional axes can be for arbitrary other variables (eg pt, eta, etc)
     hist: bh.Histogram object to use as the histogram
-      If hist is supplied, axes is ignored
+      If hist is supplied, axes, dRs, wts are ignored
       Intended only for use by internal methods (ie __add__, etc)
+    dRs, wts: awkward arrays to store as dR and weight values.
+      If supplied, axes is ignored
+      Will error out if exactly one of dRs or wts is supplied
+      Indended only for use by internal methods (ie __add__, etc)
     '''
     if N<2:
       raise ValueError("Correlator order must be at least 2")
@@ -59,13 +68,22 @@ class ProjectedEEC:
     self.N = N
     if hist is not None:
       self.hist = hist
+      self.dRs = None
+      self.wts = None
+    elif dRs is not None and wts is not None:
+      self.dRs = dRs
+      self.wts = wts
+      self.hist = None
+    elif dRs is not None or wts is not None:
+      raise ValueError("Must supply either both or neither of dRs, wts")
     elif axes is not None:
       self.hist = bh.Histogram(*axes)
+      self.dRs = None
+      self.wts = None
     else:
       self.hist = None
-
-    self.dRs = None
-    self.wts = None
+      self.dRs = None
+      self.wts = None 
 
   def __call__(self, parts, jets, *bin_vars):
     '''
@@ -75,7 +93,7 @@ class ProjectedEEC:
     jets: awkward array of jet 4-vectors. Axes (event, jet)
     bin_vars: optional additional variables to bin against
       must be passed in the same order as their axes were passed to the constructor
-      bin_vars will must be broadcast-compatible with the parts array, but the actual
+      bin_vars will must be broadcast-compatible with the jets array, but the actual
         broadcasting will be handed behind the scenes by this method
     '''
     #call c++ backend to compute correlator values
@@ -101,10 +119,18 @@ class ProjectedEEC:
                       weight=ak.flatten(wts, axis=None))
 
   def __add__(self, other):
+    print("top of add")
     if type(other) is not ProjectedEEC or self.N != other.N:
+      print("failed type")
       return NotImplemented
 
-    return ProjectedEEC(self.N, hist=self.hist+other.hist)
+    if self.hist is not None and other.hist is not None:
+      return ProjectedEEC(self.N, hist=self.hist+other.hist)
+    elif self.hist is not None or other.hist is not None:
+      return NotImplemented
+    else:
+      return ProjectedEEC(self.N, dRs = ak.concatenate((self.dRs, other.dRs), axis=0),
+                                  wts = ak.concatenate((self.wts, other.wts), axis=0))
 
   def __radd__(self, other):
     return self + other
@@ -113,14 +139,22 @@ class ProjectedEEC:
     if type(other) is not ProjectedEEC or self.N != other.N:
       return NotImplemented
 
-    self.hist += other.hist
+    if self.hist is not None:
+      self.hist += other.hist
+    else:
+      self.dRs = ak.concatenate((self.dRs, other.dRs), axis=0)
+      self.wts = ak.concatenate((self.wts, other.wts), axis=0)
+    
     return self
 
   def __mul__(self, other):
     if not isinstance(other, Number):
       return NotImplemented
 
-    return ProjectedEEC(self.N, hist=self.hist*other)
+    if self.hist is None:
+      return ProjectedEEC(self.N, dRs=self.dRs, wts=other*self.wts)
+    else:
+      return ProjectedEEC(self.N, hist=self.hist*other)
 
   def __rmul__(self, other):
     return self * other
@@ -129,11 +163,27 @@ class ProjectedEEC:
     if not isinstance(other, Number):
       return NotImplemented
 
-    self.hist *= other
+    if self.hist is not None:
+      self.hist *= other
+    else: #awkward arrays can't actually be modified in place :(
+      self.wts = self.wts*other
+
+    return self
+  
+  def __div__(self, other):
+    return self * (1/other)
+  
+  def __rdiv__(self, other): #number/EEC is undefined
+    return NotImplemented
+
+  def __idiv__(self, other):
+    self *= (1/other)
     return self
 
 def projectedEEC_values(parts, jet4vec, N, verbose=False):
   '''
+  Non OOP method to compute EEC values. Called by ProjectedEEC class
+  
   Inputs:
     parts: awkward array of jet constituent 4-vectors
       shape (event, jet, particle)
@@ -144,7 +194,7 @@ def projectedEEC_values(parts, jet4vec, N, verbose=False):
     dRs: pairwise delta R between particles within a given jet
     wts: EEC weights assigned to each delta R value
 
-    Both have shape (event, jet), and are broadcast-compatible with:
+    Both have shape (event, jet, dR/wt), and are broadcast-compatible with:
       jet quantities (ie jet pT, eta, etc)
       event quantitites (ie event weights, etc)
   '''
