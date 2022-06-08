@@ -53,7 +53,7 @@
   "minJetPt":10,
   "jetSize":0.4,
   "eec":{
-    "N":3,
+    "N":5,
     "nBins":40,
     "axisMin":1e-5,
     "axisMax":1.0

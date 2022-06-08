@@ -98,6 +98,33 @@ jet4vec = ak.zip({
   with_name = 'LorentzVector'
 )
 
+from eec import ProjectedEEC
+import boost_histogram as bh
+
+axes = [bh.axis.Regular(bins=args.eec.nBins, 
+                        start=args.eec.axisMin, 
+                        stop=args.eec.axisMax, 
+                        transform=bh.axis.transform.log)]
+
+eec = ProjectedEEC(args.eec.N, axes=axes)
+eec(parts, jet4vec, verbose=True)
+print(eec.hist)
+
+midbins = eec.hist.axes[0].centers
+binwidths = eec.hist.axes[0].widths
+hist = eec.hist.values()
+
+plt.xscale('log')
+plt.yscale('log')
+plt.xlabel('$\Delta R$')
+plt.ylabel("Projected %d-point correlator"%args.eec.N)
+plt.errorbar(midbins, hist/binwidths, fmt='o',lw=1.5,markersize=5)
+plt.legend()
+plt.axvline(args.jetSize, c='k')
+#plt.savefig(args.plotFile, format='png')
+plt.show()
+
+
 '''
 
 t0 = time()
