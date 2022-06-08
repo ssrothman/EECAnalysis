@@ -1,3 +1,3 @@
 [submodule "EECs"]
 	path = EECs
-	url = https://github.com/ssrothman/EECs
+  url = git@github.com:ssrothman/EECs.git
