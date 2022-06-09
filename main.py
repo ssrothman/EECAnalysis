@@ -9,6 +9,9 @@ from coffea.nanoevents.methods import vector, candidate
 from time import time
 import fastjet
 from scipy.special import comb
+import coffea
+
+from EECProcessor import EECProcessor
 
 #read in json config
 with open("config.json", 'r') as f:
@@ -26,11 +29,62 @@ print(args.file)
 
 #read in uproot file
 #with uproot.open("copy.root") as f:
-with uproot.open(args.file+":Events") as f:
-  data = f.arrays(args.branches, cut=readCut, entry_stop=args.entry_stop)
+#with uproot.open(args.file+":Events") as f:
+  #data = f.arrays(args.branches, cut=readCut, entry_stop=args.entry_stop)
 
-print("read in file")
+#print("read in file")
 
+from EECProcessor import EECProcessor
+from coffea.nanoevents import NanoEventsFactory, BaseSchema
+
+file = uproot.open(args.file)
+events = NanoEventsFactory.from_root(
+    file,
+    entry_stop=10000,
+    metadata={"dataset": "DoubleMuon"},
+    schemaclass=BaseSchema,
+).events()
+p = EECProcessor()
+out = p.process(events)
+
+print(out)
+
+fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(2, 2)
+coffea.hist.plot1d(out['myJets'].project('pt'), ax=ax0, density=True)
+coffea.hist.plot1d(out['cmsswJets'].project('pt'), ax=ax0, clear=False, density=True)
+ax0.margins(0.05)
+
+coffea.hist.plot1d(out['myJets'].project('eta'), ax=ax1, density=True)
+coffea.hist.plot1d(out['cmsswJets'].project('eta'), ax=ax1, clear=False, density=True)
+ax1.margins(0.05)
+ax1.set_ylim(0,0.18)
+
+coffea.hist.plot1d(out['myJets'].project('phi'), ax=ax2, density=True)
+coffea.hist.plot1d(out['cmsswJets'].project('phi'), ax=ax2, clear=False, density=True)
+ax2.margins(0.05)
+ax2.set_ylim(0,0.20)
+
+coffea.hist.plot1d(out['myJets'].project('npart'), ax=ax3, density=True)
+coffea.hist.plot1d(out['cmsswJets'].project('npart'), ax=ax3, clear=False, density=True)
+ax3.margins(0.05)
+ax3.set_ylim(0,0.08)
+
+plt.tight_layout()
+plt.savefig("jets_density_puppi.png", format='png', bbox_inches='tight')
+plt.clf()
+#plt.show()
+
+coffea.hist.plot1d(out['mass'].project('nMyJets'))
+coffea.hist.plot1d(out['mass'].project('nCmsJets'), clear=False)
+plt.gca().margins(0.05)
+plt.ylim(0, 50)
+plt.savefig("njets_puppi.png", format='png', bbox_inches='tight')
+plt.clf()
+#plt.show()
+
+#coffea.hist.plot1d(out['mass'].integrate('dataset'))
+#plt.show()
+'''
 #apply cuts to muons
 mask = np.ones(len(data), dtype=bool)
 for cut in args.muCuts:
@@ -123,7 +177,7 @@ plt.legend()
 plt.axvline(args.jetSize, c='k')
 #plt.savefig(args.plotFile, format='png')
 plt.show()
-
+'''
 
 '''
 

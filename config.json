@@ -3,6 +3,18 @@
     "HLT_DoubleIsoMu20_eta2p1"
   ],
   "presel":"(nMuon==2)",
+  "evtCuts":[
+    {
+      "var" : "nMuon",
+      "minval" : 2,
+      "maxval" : 2
+    },
+    {
+      "var" : "HLT_DoubleIsoMu20_eta2p1",
+      "minval" : 1,
+      "maxval" : 1
+    }
+  ],
   "muCuts":[
     {
       "var" : "Muon_pt",
@@ -48,10 +60,12 @@
     "eta":"PFCands_eta",
     "phi":"PFCands_phi",
     "mass":"PFCands_mass",
-    "charge":"PFCands_charge"
+    "charge":"PFCands_charge",
+    "puppiWeight":"PFCands_puppiWeight"
   },
-  "minJetPt":10,
+  "minJetPt":12,
   "jetSize":0.4,
+  "minPfCandPt":0,
   "eec":{
     "N":5,
     "nBins":40,
