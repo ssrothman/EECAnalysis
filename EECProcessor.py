@@ -4,6 +4,8 @@ import json
 from types import SimpleNamespace
 from coffea.nanoevents.methods import vector, candidate
 import fastjet
+from eec import ProjectedEEC
+import boost_histogram as bh
 
 from coffea import hist, processor
 from coffea.nanoevents.methods import candidate
@@ -11,14 +13,44 @@ ak.behavior.update(candidate.behavior)
 
 class EECProcessor(processor.ProcessorABC):
     def __init__(self):
+        #read in json config
+        with open("config.json", 'r') as f:
+            self.args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
+        
+        eecAxes = []
+        eecAxisNames = []
+        eecAxisLabels = []
+
+        for axis in self.args.eec.axes:
+            trans=None
+            if axis.transform == 'log':
+                trans=bh.axis.transform.log
+            elif axis.transform != "lin":
+                raise ValueError("Axis transform must be one of 'log', 'lin'")
+            
+            eecAxes.append(bh.axis.Regular(
+                                bins=axis.nBins, 
+                                start=axis.axisMin,
+                                stop=axis.axisMax,
+                                transform=trans))
+            eecAxisLabels.append(axis.label)
+            eecAxisNames.append(axis.name)
+
+        #build accumulator
         self._accumulator = processor.dict_accumulator({
             "sumw": processor.defaultdict_accumulator(float),
             "mass": hist.Hist(
                 "Events",
                 hist.Cat("dataset", "Dataset"),
                 hist.Bin("mass", "$m_{\mu\mu}$ [GeV]", 60, 60, 120),
-                hist.Bin("nMyJets", "$N_{Jets}$", 10, 0, 50),
-                hist.Bin("nCmsJets", "$N_{Jets}$", 10, 0, 50)
+            ),
+            "nMyJets" : hist.Hist(
+                "Events",
+                hist.Bin("nMyJets", "$N_{Jets}$", 50, 0, 50),
+            ),
+            "nCmsswJets" : hist.Hist(
+                "Events",
+                hist.Bin("nCmsswJets", "$N_{Jets}$", 50, 0, 50)
             ),
             "myJets" : hist.Hist(
                 "$N_{Jets}$",
@@ -35,12 +67,14 @@ class EECProcessor(processor.ProcessorABC):
                 hist.Bin("npart", "$N_{constituents}$", 10, 0, 100),
                 hist.Bin("eta", "$\eta$", 10, -5, 5),
                 hist.Bin("phi", "$\phi$", 10, -np.pi, np.pi)
+            ),
+            "EEC" : ProjectedEEC(
+                N = self.args.eec.N,
+                axes = eecAxes,
+                axisNames = eecAxisNames,
+                axisLabels = eecAxisLabels
             )
         })
-
-        #read in json config
-        with open("config.json", 'r') as f:
-            self.args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
 
     @property
     def accumulator(self):
@@ -104,7 +138,7 @@ class EECProcessor(processor.ProcessorABC):
         mass = mass[Zsel]
 
         pfcands = ak.zip({
-                "pt" : data[self.args.pfcands.pt] * data[self.args.pfcands.puppiWeight],
+                "pt" : data[self.args.pfcands.pt],
                 'eta' : data[self.args.pfcands.eta],
                 'phi' : data[self.args.pfcands.phi],
                 'mass' : data[self.args.pfcands.mass],
@@ -112,6 +146,10 @@ class EECProcessor(processor.ProcessorABC):
             behavior = candidate.behavior,
             with_name = 'PtEtaPhiMLorentzVector'
         )
+
+        #if valid puppi weights given in config file
+        if hasattr(self.args.pfcands, "puppiWeight") and hasattr(data, self.args.pfcands.puppiWeight):
+            pfcands['pt'] = pfcands.pt * data[self.args.pfcands.puppiWeight]
 
         pfcands = pfcands[pfcands.pt > 0]
 
@@ -137,6 +175,8 @@ class EECProcessor(processor.ProcessorABC):
             with_name = 'LorentzVector'
         )
 
+        #TODO: JECs HERE
+
         goodjets = np.logical_and(
             jet4vec.delta_r(mu1) > self.args.jetSize,
             jet4vec.delta_r(mu2) > self.args.jetSize)
@@ -148,9 +188,16 @@ class EECProcessor(processor.ProcessorABC):
         output["mass"].fill(
             dataset=dataset,
             mass=mass,
-            nMyJets=ak.num(jet4vec),
-            nCmsJets=ak.num(data['Jet_pt'])
         )
+
+        output['nMyJets'].fill(
+            nMyJets = ak.num(jet4vec)
+        )
+
+        output['nCmsswJets'].fill(
+            nCmsswJets = ak.num(data[self.args.jets.pt])
+        )
+
         output['myJets'].fill(
             dataset=dataset,
             pt=ak.flatten(jet4vec.pt, axis=None),
@@ -166,6 +213,20 @@ class EECProcessor(processor.ProcessorABC):
             phi=ak.flatten(data['Jet_phi'], axis=None),
             npart=ak.flatten(data["Jet_nConstituents"], axis=None)
         )
+
+        #fill EEC object
+        eecBinVars = []
+        for axis in self.args.eec.axes[1:]:
+            if axis.variable == 'JetPt':
+                eecBinVars.append(jet4vec.pt)
+            elif axis.variable == 'JetEta':
+                eecBinVars.append(jet4vec.eta)
+            elif axis.variable == 'JetPhi':
+                eecBinVaris.append(jet4vec.phi)
+            else:
+                raise ValueError("Unsupported eec bin variable %s"%axis.variable)
+       
+        output['EEC'].fill(parts, jet4vec, *eecBinVars, verbose=True)
 
         return output
 

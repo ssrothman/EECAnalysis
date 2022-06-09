@@ -1,8 +1,4 @@
 {
-  "triggers":[
-    "HLT_DoubleIsoMu20_eta2p1"
-  ],
-  "presel":"(nMuon==2)",
   "evtCuts":[
     {
       "var" : "nMuon",
@@ -67,31 +63,28 @@
   "jetSize":0.4,
   "minPfCandPt":0,
   "eec":{
-    "N":5,
-    "nBins":40,
-    "axisMin":1e-5,
-    "axisMax":1.0
+    "N":3,
+    "axes" : [
+      {
+        "name" : "dR",
+        "label" : "$\\Delta R$",
+        "variable" : "dR",
+        "nBins":100,
+        "axisMin":1e-5,
+        "axisMax":1.0,
+        "transform":"log"
+      },
+      {
+        "name" : "pT",
+        "label" : "$p_{T,Jet}$",
+        "variable" : "JetPt",
+        "nBins":10,
+        "axisMin":1,
+        "axisMax":500,
+        "transform": "lin"
+      }
+    ]
   },
   "file":"root://cmseos.fnal.gov//store/user/lpcpfnano/jekrupa/correlation-v1/2017/DoubleMuon2017/DoubleMuon/DoubleMuon_Run2017F/220505_191004/0000/nano_data2017_2.root",
-  "plotFile":"proof3.png",
-  "entry_stop":-1,
-  "branches":[
-    "Muon_pt",
-    "Muon_eta",
-    "Muon_phi",
-    "Muon_mass",
-    "Muon_charge",
-    "Muon_tightId",
-    "Muon_pfRelIso04_all",
-    "Jet_pt",
-    "Jet_eta",
-    "Jet_phi",
-    "Jet_mass",
-    "Jet_nConstituents",
-    "PFCands_pt",
-    "PFCands_eta",
-    "PFCands_phi",
-    "PFCands_mass",
-    "PFCands_charge"
-  ]
+  "entry_stop":-1
 }
