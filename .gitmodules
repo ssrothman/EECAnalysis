@@ -3,3 +3,6 @@
 	url = git@github.com:ssrothman/EECs.git
   update = merge
   branch = main
+[submodule "fastjet"]
+	path = fastjet
+	url = git@github.com:ssrothman/fastjet.git
