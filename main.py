@@ -5,11 +5,9 @@ import uproot
 import numpy as np
 import matplotlib.pyplot as plt
 from types import SimpleNamespace
-from coffea.nanoevents.methods import vector, candidate
 from time import time
-import fastjet
 from scipy.special import comb
-import coffea
+import pickle
 
 from EECProcessor import EECProcessor
 
@@ -32,6 +30,9 @@ events = NanoEventsFactory.from_root(
 ).events()
 p = EECProcessor()
 out = p.process(events)
+
+with open(args.outname, 'wb') as f:
+  pickle.dump(out, f)
 
 print(out)
 
