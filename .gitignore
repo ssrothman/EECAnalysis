@@ -12,3 +12,4 @@ clib/eec_back.py
 clib/build/*
 clib/dist/*
 clib/energy_energy_correlators.egg-info/*
+*.pickle

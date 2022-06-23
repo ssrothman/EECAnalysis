@@ -1,78 +1,54 @@
+from cmath import log
+from attr import dataclass
 import awkward as ak
 import numpy as np
 import json
 from types import SimpleNamespace
 from coffea.nanoevents.methods import vector, candidate
-import fastjet
-from eec import ProjectedEEC
-import boost_histogram as bh
+import hist
+from Histogram import Histogram
 
-from coffea import hist, processor
-from coffea.nanoevents.methods import candidate
+from coffea import processor
+
 ak.behavior.update(candidate.behavior)
+ak.behavior.update(vector.behavior)
+
 
 class EECProcessor(processor.ProcessorABC):
     def __init__(self):
         #read in json config
         with open("config.json", 'r') as f:
             self.args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
-        
-        eecAxes = []
-        eecAxisNames = []
-        eecAxisLabels = []
-
-        for axis in self.args.eec.axes:
-            trans=None
-            if axis.transform == 'log':
-                trans=bh.axis.transform.log
-            elif axis.transform != "lin":
-                raise ValueError("Axis transform must be one of 'log', 'lin'")
-            
-            eecAxes.append(bh.axis.Regular(
-                                bins=axis.nBins, 
-                                start=axis.axisMin,
-                                stop=axis.axisMax,
-                                transform=trans))
-            eecAxisLabels.append(axis.label)
-            eecAxisNames.append(axis.name)
-
+    
         #build accumulator
         self._accumulator = processor.dict_accumulator({
             "sumw": processor.defaultdict_accumulator(float),
-            "mass": hist.Hist(
-                "Events",
-                hist.Cat("dataset", "Dataset"),
-                hist.Bin("mass", "$m_{\mu\mu}$ [GeV]", 60, 60, 120),
+            "nJets": Histogram(
+                hist.axis.Regular(10, 0, 10, name="nJets", label="nJets")
             ),
-            "nMyJets" : hist.Hist(
-                "Events",
-                hist.Bin("nMyJets", "$N_{Jets}$", 50, 0, 50),
+            "jets": Histogram(
+                hist.axis.Regular(100, 0, 1000, name='pT', label='$p_T$'),
+                hist.axis.Regular(100, -5, 5, name='eta', label='$\eta$'),
+                hist.axis.Regular(100, -np.pi, np.pi, name='phi', label='$\phi$')
             ),
-            "nCmsswJets" : hist.Hist(
-                "Events",
-                hist.Bin("nCmsswJets", "$N_{Jets}$", 50, 0, 50)
+            "EEC2": Histogram(
+                hist.axis.Regular(100, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
+                hist.axis.Regular(100, 0, 1000, name='pT', label='$p_T$'),
+                hist.axis.Regular(100, 0, 5, name='eta', label='$\eta$')
             ),
-            "myJets" : hist.Hist(
-                "$N_{Jets}$",
-                hist.Cat("dataset", "Dataset"),
-                hist.Bin("pt", "$p_T$ [GeV]", 50, 0, 100),
-                hist.Bin("npart", "N_{constituents}", 10, 0, 100),
-                hist.Bin("eta", "$\eta", 10, -5, 5),
-                hist.Bin("phi", "$\phi", 10, -np.pi, np.pi)
+            "otherEEC":Histogram(
+                hist.axis.Regular(100, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
             ),
-            "cmsswJets" : hist.Hist(
-                "$N_{Jets}$",
-                hist.Cat("dataset", "Dataset"),
-                hist.Bin("pt", "$p_T$ [GeV]", 50, 0, 100),
-                hist.Bin("npart", "$N_{constituents}$", 10, 0, 100),
-                hist.Bin("eta", "$\eta$", 10, -5, 5),
-                hist.Bin("phi", "$\phi$", 10, -np.pi, np.pi)
+            "dimuon":Histogram(
+                hist.axis.Regular(100, self.args.Zsel.minMass, self.args.Zsel.maxMass, name='mass', label='$m_{\mu\mu}$'),
+                hist.axis.Regular(100, 0, 1000, name='pT', label='$p_{T,\mu\mu}$'),
+                hist.axis.Regular(100, -5, 5, name='eta', label='$\eta_{\mu\mu}$'),
+                hist.axis.Regular(100,-np.pi,np.pi,name='phi', label='$\phi_{\mu\mu}$')
             ),
-            "EEC" : ProjectedEEC(
-                N = self.args.eec.N,
-                axes = eecAxes,
-                axisNames = eecAxisNames,
-                axisLabels = eecAxisLabels
+            "muon":Histogram(
+                hist.axis.Regular(100, 0, 1000, name='pT', label='$p_{T,\mu\mu}$'),
+                hist.axis.Regular(100, -5, 5, name='eta', label='$\eta_{\mu\mu}$'),
+                hist.axis.Regular(100,-np.pi,np.pi,name='phi', label='$\phi_{\mu\mu}$')
             )
         })
 
@@ -124,9 +100,11 @@ class EECProcessor(processor.ProcessorABC):
         mu1 = muons[:,0]
         mu2 = muons[:,1]
 
-        mass = np.abs(mu1 + mu2)
+        Z = mu1+mu2
 
-        massWindow = np.logical_and(mass<self.args.Zsel.maxMass, mass>self.args.Zsel.minMass)
+        Z.mass
+
+        massWindow = np.logical_and(Z.mass<self.args.Zsel.maxMass, Z.mass>self.args.Zsel.minMass)
         charge = ak.prod(data[self.args.muons.charge],axis=1) == -1
 
         Zsel = np.logical_and.reduce((massWindow, charge))
@@ -135,98 +113,79 @@ class EECProcessor(processor.ProcessorABC):
         data = data[Zsel]
         mu1 = mu1[Zsel]
         mu2 = mu2[Zsel]
-        mass = mass[Zsel]
+        Z = Z[Zsel]
 
-        pfcands = ak.zip({
-                "pt" : data[self.args.pfcands.pt],
-                'eta' : data[self.args.pfcands.eta],
-                'phi' : data[self.args.pfcands.phi],
-                'mass' : data[self.args.pfcands.mass],
+        jets = ak.zip({
+            "pt" : data.selectedPatJetsAK4PFPuppi_pt,
+            'eta' : data.selectedPatJetsAK4PFPuppi_eta,
+            "phi" : data.selectedPatJetsAK4PFPuppi_phi,
+            'mass' : data.selectedPatJetsAK4PFPuppi_mass
             },
-            behavior = candidate.behavior,
-            with_name = 'PtEtaPhiMLorentzVector'
+            behavior=vector.behavior,
+            with_name='PtEtaPhiMLorentzVector'
         )
-
-        #if valid puppi weights given in config file
-        if hasattr(self.args.pfcands, "puppiWeight") and hasattr(data, self.args.pfcands.puppiWeight):
-            pfcands['pt'] = pfcands.pt * data[self.args.pfcands.puppiWeight]
-
-        pfcands = pfcands[pfcands.pt > 0]
-
-        pfcandmask = pfcands.pt > self.args.minPfCandPt
-        pfcands = pfcands[pfcandmask]
-
-        charge= data[self.args.pfcands.charge]
-
-        #jet clustering
-        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, self.args.jetSize)
-        cluster = fastjet.ClusterSequence(pfcands, jetdef)
-
-        parts = cluster.constituents(self.args.minJetPt)
         
-        #need to have the 4vector summation because ak.sum() doesn't work right for 4vecs
-        jet4vec = ak.zip({
-                'x' : ak.sum(parts.x, axis=-1),
-                'y' : ak.sum(parts.y, axis=-1),
-                'z' : ak.sum(parts.z, axis=-1),
-                't' : ak.sum(parts.t, axis=-1)
-            },
-            behavior = vector.behavior,
-            with_name = 'LorentzVector'
-        )
-
-        #TODO: JECs HERE
-
-        goodjets = np.logical_and(
-            jet4vec.delta_r(mu1) > self.args.jetSize,
-            jet4vec.delta_r(mu2) > self.args.jetSize)
-        
-        jet4vec = jet4vec[goodjets]
-        parts = parts[goodjets]
+        #veto jets that are too close to the muons
+        goodjets = np.logical_and(jets.delta_r(mu1)>self.args.jetSize, jets.delta_r(mu2)>self.args.jetSize)
+        jets = jets[goodjets]
 
         output["sumw"][dataset] += len(data)
-        output["mass"].fill(
-            dataset=dataset,
-            mass=mass,
+        output['nJets'].fill(
+            ak.flatten(ak.num(jets.pt), axis=None),
+            weight=ak.flatten(data.Generator_weight,axis=None)
         )
 
-        output['nMyJets'].fill(
-            nMyJets = ak.num(jet4vec)
+        castedweight = ak.broadcast_arrays(data.Generator_weight, jets.pt)[0]
+        output['jets'].fill(
+            pT = ak.flatten(jets.pt, axis=None),
+            eta = ak.flatten(jets.eta, axis=None),
+            phi = ak.flatten(jets.phi, axis=None),
+            weight=ak.flatten(castedweight, axis=None)
         )
 
-        output['nCmsswJets'].fill(
-            nCmsswJets = ak.num(data[self.args.jets.pt])
+        EEC2_dRs = data.EEC2_dRs
+        EEC2_wts = data.EEC2_wts
+        EEC2_jetIdx = data.EEC2_jetIdx
+
+        goodEEC = goodjets[EEC2_jetIdx]
+        EEC2_dRs = EEC2_dRs[goodEEC]
+        EEC2_wts = EEC2_wts[goodEEC]
+        EEC2_jetIdx = EEC2_jetIdx[goodEEC]
+
+        jetPt = data.selectedPatJetsAK4PFPuppi_pt
+        jetPt = jetPt[EEC2_jetIdx]
+
+        jetEta = np.abs(data.selectedPatJetsAK4PFPuppi_eta)
+        jetEta = jetEta[EEC2_jetIdx]
+
+
+        output['EEC2'].fill(
+            ak.flatten(EEC2_dRs, axis=None), 
+            weight=ak.flatten(EEC2_wts * data.Generator_weight, axis=None),
+            pT = ak.flatten(jetPt, axis=None),
+            eta = ak.flatten(jetEta, axis=None)
         )
 
-        output['myJets'].fill(
-            dataset=dataset,
-            pt=ak.flatten(jet4vec.pt, axis=None),
-            eta=ak.flatten(jet4vec.eta, axis=None),
-            phi=ak.flatten(jet4vec.phi, axis=None),
-            npart=ak.flatten(ak.num(parts, axis=2), axis=None)
+        castedweight = ak.broadcast_arrays(data.Generator_weight, Z.pt)[0]
+        output['dimuon'].fill(
+            mass = Z.mass,
+            pT = Z.pt,
+            eta = Z.eta,
+            phi = Z.phi,
+            weight=castedweight
         )
 
-        output['cmsswJets'].fill(
-            dataset=dataset,
-            pt=ak.flatten(data['Jet_pt'],axis=None),
-            eta=ak.flatten(data['Jet_eta'], axis=None),
-            phi=ak.flatten(data['Jet_phi'], axis=None),
-            npart=ak.flatten(data["Jet_nConstituents"], axis=None)
+        output['muon'].fill(
+            pT = mu1.pt,
+            eta = mu1.eta,
+            phi = mu1.phi
         )
 
-        #fill EEC object
-        eecBinVars = []
-        for axis in self.args.eec.axes[1:]:
-            if axis.variable == 'JetPt':
-                eecBinVars.append(jet4vec.pt)
-            elif axis.variable == 'JetEta':
-                eecBinVars.append(jet4vec.eta)
-            elif axis.variable == 'JetPhi':
-                eecBinVaris.append(jet4vec.phi)
-            else:
-                raise ValueError("Unsupported eec bin variable %s"%axis.variable)
-       
-        output['EEC'].fill(parts, jet4vec, *eecBinVars, verbose=True)
+        output['muon'].fill(
+            pT = mu2.pt,
+            eta = mu2.eta,
+            phi = mu2.phi
+        )
 
         return output
 
