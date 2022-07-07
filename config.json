@@ -6,7 +6,7 @@
       "maxval" : 2
     },
     {
-      "var" : "HLT_DoubleIsoMu20_eta2p1",
+      "var" : "HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass8",
       "minval" : 1,
       "maxval" : 1
     }
@@ -34,8 +34,8 @@
     }
   ],
   "Zsel":{
-    "minMass":80,
-    "maxMass":102
+    "minMass":60,
+    "maxMass":120
   },
   "muons":{
     "eta":"Muon_eta",

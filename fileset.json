@@ -1,0 +1,10 @@
+{
+	"DYJetsToLL": [
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_simon/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_take3/220624_074716/0000/nano_mc2017_1.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_simon/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_take3/220624_074716/0001/nano_mc2017_1230.root"
+	],
+	"DoubleMuon": [
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_simon/2017/DoubleMuon/DoubleMuon/DoubleMuon_Run2017C_take2/220624_074202/0000/nano_data2017_1.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_simon/2017/DoubleMuon/DoubleMuon/DoubleMuon_Run2017C_take2/220624_074202/0000/nano_data2017_99.root"
+	]
+}
