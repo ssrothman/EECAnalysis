@@ -24,7 +24,7 @@
     },
     {
       "var" : "Muon_pfRelIso04_all",
-      "minval" : 0,
+      "minval" : -999,
       "maxval" : 0.15
     },
     {
@@ -37,6 +37,13 @@
     "minMass":60,
     "maxMass":120
   },
+  "genCands":{
+    "pt" : "GenCands_pt",
+    "eta" : "GenCands_eta",
+    "phi" : "GenCands_phi",
+    "mass" : "GenCands_mass",
+    "pdgId" : "GenCands_pdgId"
+  },
   "muons":{
     "eta":"Muon_eta",
     "phi":"Muon_phi",
@@ -45,12 +52,20 @@
     "charge":"Muon_charge"
   },
   "jets":{
-    "pt":"Jet_pt",
-    "eta":"Jet_eta",
-    "phi":"Jet_phi",
-    "mass":"Jet_mass",
-    "cands":"Jet_pFCandsIdx"
+    "pt":"selectedPatJetsAK4PFCHS_pt",
+    "eta":"selectedPatJetsAK4PFCHS_eta",
+    "phi":"selectedPatJetsAK4PFCHS_phi",
+    "mass":"selectedPatJetsAK4PFCHS_mass",
+    "nConstituents":"selectedPatJetsAK4PFCHS_nConstituents"
+
   },
+  "genJets":{
+    "pt":"ak4GenJetsNoNu_pt",
+    "eta":"ak4GenJetsNoNu_eta",
+    "phi":"ak4GenJetsNoNu_phi",
+    "mass":"ak4GenJetsNoNu_mass"
+  },
+  "jetArbitration" :"all",
   "pfcands":{
     "pt":"PFCands_pt",
     "eta":"PFCands_eta",
@@ -62,30 +77,7 @@
   "minJetPt":12,
   "jetSize":0.4,
   "minPfCandPt":0,
-  "eec":{
-    "N":3,
-    "axes" : [
-      {
-        "name" : "dR",
-        "label" : "$\\Delta R$",
-        "variable" : "dR",
-        "nBins":100,
-        "axisMin":1e-5,
-        "axisMax":1.0,
-        "transform":"log"
-      },
-      {
-        "name" : "pT",
-        "label" : "$p_{T,Jet}$",
-        "variable" : "JetPt",
-        "nBins":10,
-        "axisMin":1,
-        "axisMax":500,
-        "transform": "lin"
-      }
-    ]
-  },
-  "file":"root://cmsxrootd.fnal.gov//store/user/srothman/v2_simon/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_test/220623_072649/0000/nano_mc2017_9.root",
-  "entry_stop":-1,
-  "outname" : "out.pickle"
+  "fileset":"fileset.json",
+  "histname" : "output/hists_CHS.pickle",
+  "metricname" : "output/metrics_CHS.pickle"
 }

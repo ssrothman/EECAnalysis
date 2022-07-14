@@ -1,0 +1,39 @@
+{
+  "triggers":["IsoMu27"],
+  "muons" : "Muon",
+  "jets" : "selectedPatJetsAK4PFPuppi",
+  "parts" : "PFCands",
+  
+  "genParts" : "GenCands",
+  "genJets" : "ak4GenJetsNoNu",
+
+  "evtCuts" : [
+    {
+      "var" : "nMuon",
+      "minval" : 2,
+      "maxval" : 2
+    }
+  ],
+
+  "muCuts":{
+    "isoName" : "pfRelIso04_all",
+    "maxIso" : 0.15,
+    "id" : "tightId",
+    "minPt" : 29,
+    "maxEta" : 2.4
+  },
+
+  "Zsel":{
+    "minMass":60,
+    "maxMass":120
+  },
+
+  "jetSize":0.4,
+  "jetArbitration" :"all",
+
+  "minJetPt":12,
+  "minPfCandPt":0,
+  "fileset":"fileset.json",
+  "histname" : "output/hists_test.pickle",
+  "metricname" : "output/metrics_test.pickle"
+}

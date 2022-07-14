@@ -1,0 +1,81 @@
+{
+  "evtCuts":[
+    {
+      "var" : "nMuon",
+      "minval" : 2,
+      "maxval" : 2
+    },
+    {
+      "var" : "HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass8",
+      "minval" : 1,
+      "maxval" : 1
+    }
+  ],
+  "muCuts":[
+    {
+      "var" : "Muon_pt",
+      "minval" : 25,
+      "maxval" : -999
+    },
+    {
+      "var" : "Muon_eta",
+      "minval" : -2.1,
+      "maxval" : 2.1
+    },
+    {
+      "var" : "Muon_pfRelIso04_all",
+      "minval" : -999,
+      "maxval" : 0.15
+    },
+    {
+      "var" : "Muon_tightId",
+      "minval" : 1,
+      "maxval" : 1
+    }
+  ],
+  "Zsel":{
+    "minMass":60,
+    "maxMass":120
+  },
+  "genCands":{
+    "pt" : "GenCands_pt",
+    "eta" : "GenCands_eta",
+    "phi" : "GenCands_phi",
+    "mass" : "GenCands_mass",
+    "pdgId" : "GenCands_pdgId"
+  },
+  "muons":{
+    "eta":"Muon_eta",
+    "phi":"Muon_phi",
+    "pt":"Muon_pt",
+    "mass":"Muon_mass",
+    "charge":"Muon_charge"
+  },
+  "jets":{
+    "pt":"selectedPatJetsAK4PFPuppi_pt",
+    "eta":"selectedPatJetsAK4PFPuppi_eta",
+    "phi":"selectedPatJetsAK4PFPuppi_phi",
+    "mass":"selectedPatJetsAK4PFPuppi_mass",
+    "nConstituents":"selectedPatJetsAK4PFPuppi_nConstituents"
+  },
+  "genJets":{
+    "pt":"ak4GenJetsNoNu_pt",
+    "eta":"ak4GenJetsNoNu_eta",
+    "phi":"ak4GenJetsNoNu_phi",
+    "mass":"ak4GenJetsNoNu_mass"
+  },
+  "pfcands":{
+    "pt":"PFCands_pt",
+    "eta":"PFCands_eta",
+    "phi":"PFCands_phi",
+    "mass":"PFCands_mass",
+    "charge":"PFCands_charge",
+    "puppiWeight":"PFCands_puppiWeight"
+  },
+  "minJetPt":12,
+  "jetSize":0.4,
+  "minPfCandPt":0,
+  "fileset":"fileset.json",
+  "histname" : "output/hists.pickle",
+  "metricname" : "output/metrics.pickle"
+}

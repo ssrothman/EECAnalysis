@@ -1,157 +1,63 @@
-import json
-import numpy as np
 import awkward as ak
-import uproot
 import numpy as np
-import matplotlib.pyplot as plt
-from types import SimpleNamespace
-from coffea.nanoevents.methods import vector, candidate
-from time import time
-import fastjet
+from coffea.nanoevents.methods import vector
+import uproot
 from scipy.special import comb
 import coffea
+from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
+import matplotlib.pyplot as plt
+import hist
 
-from EECProcessor import EECProcessor
+print("about to read")
+#t = uproot.open("nano_mc2017_105.root:Events")
+t = NanoEventsFactory.from_root("nano_mc2017.root", schemaclass=BaseSchema, entry_start=10, entry_stop=11).events()
+print("read")
 
-#read in json config
-with open("config.json", 'r') as f:
-  args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
-print("read in config")
-
-readCut = "("
-for trigger in args.triggers:
-  readCut += " (" + trigger + "==1) |"
-readCut = readCut[:-1] + ")"
-
-readCut += " & " + args.presel
-
-print(args.file)
-
-#read in uproot file
-#with uproot.open("copy.root") as f:
-#with uproot.open(args.file+":Events") as f:
-  #data = f.arrays(args.branches, cut=readCut, entry_stop=args.entry_stop)
-
-#print("read in file")
-
-from EECProcessor import EECProcessor
-from coffea.nanoevents import NanoEventsFactory, BaseSchema
-
-file = uproot.open(args.file)
-data = NanoEventsFactory.from_root(
-    file,
-    entry_stop=10000,
-    metadata={"dataset": "DoubleMuon"},
-    schemaclass=BaseSchema,
-).events()
-
-#apply cuts...
-mask = np.ones(len(data), dtype=bool)
-
-for cut in  args.evtCuts:
-    if cut.minval == cut.maxval:
-        mask = np.logical_and(mask, data[cut.var] == cut.minval)
-    else:
-        if cut.minval != -999:
-            mask = np.logical_and(mask, data[cut.var] >= cut.minval)
-        if cut.maxval != -999:
-            mask = np.logical_and(mask, data[cut.var] <= cut.maxval)
-
-
-for cut in  args.muCuts:
-    if cut.minval == cut.maxval:
-        mask = np.logical_and(mask, ak.all(data[cut.var] == cut.minval, axis=1))
-    else:
-        if cut.minval != -999:
-            mask = np.logical_and(mask, ak.all(data[cut.var] >= cut.minval, axis=1))
-        if cut.maxval != -999:
-            mask = np.logical_and(mask, ak.all(data[cut.var] <= cut.maxval, axis=1))
-
-print("%d/%d (%0.2f%%) pass initial cuts"%(sum(mask), len(mask), 100*sum(mask)/len(mask)))
-data = data[mask]
-
-#z selection
-muons = ak.to_regular(ak.zip({
-        "pt" : data[ args.muons.pt],
-        'eta' : data[ args.muons.eta],
-        'phi' : data[ args.muons.phi],
-        'mass' : data[ args.muons.mass]
-    },
-    behavior = vector.behavior,
-    with_name='PtEtaPhiMLorentzVector'
-))
-
-mu1 = muons[:,0]
-mu2 = muons[:,1]
-
-mass = np.abs(mu1 + mu2)
-
-massWindow = np.logical_and(mass< args.Zsel.maxMass, mass> args.Zsel.minMass)
-charge = ak.prod(data[ args.muons.charge],axis=1) == -1
-
-Zsel = np.logical_and.reduce((massWindow, charge))
-
-print("%d/%d (%0.2f%%) pass Z selection"%(sum(Zsel), len(Zsel), 100*sum(Zsel)/len(Zsel)))
-data = data[Zsel]
-
-pfcands = ak.zip({
-        "pt" : data[ args.pfcands.pt] * data[args.pfcands.puppiWeight],
-        'eta' : data[ args.pfcands.eta],
-        'phi' : data[ args.pfcands.phi],
-        'mass' : data[ args.pfcands.mass],
-    },
-    behavior = candidate.behavior,
-    with_name = 'PtEtaPhiMLorentzVector'
+parts = ak.zip({
+    "pt" : t.PFCands_pt * t.PFCands_puppiWeight,
+    "eta" : t.PFCands_eta,
+    "phi" : t.PFCands_phi,
+    "mass" : t.PFCands_mass
+  },
+  behavior = vector.behavior,
+  with_name = 'PtEtaPhiMLorentzVector'
 )
+partsIdx = ak.local_index(parts)
+print("made parts")
 
-pfcands = pfcands[pfcands.pt>0]
-
-pfcandmask = pfcands.pt >  args.minPfCandPt
-pfcands = pfcands[pfcandmask]
-
-charge= data[ args.pfcands.charge]
-
-#jet clustering
-jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm,  args.jetSize)
-cluster = fastjet.ClusterSequence(pfcands, jetdef)
-
-parts = cluster.constituents( args.minJetPt)
-
-#need to have the 4vector summation because ak.sum() doesn't work right for 4vecs
-jet4vec = ak.zip({
-        'x' : ak.sum(parts.x, axis=-1),
-        'y' : ak.sum(parts.y, axis=-1),
-        'z' : ak.sum(parts.z, axis=-1),
-        't' : ak.sum(parts.t, axis=-1)
-    },
-    behavior = vector.behavior,
-    with_name = 'LorentzVector'
+jets = ak.zip({
+    "pt" : t.selectedPatJetsAK4PFPuppi_pt,
+    "eta" : t.selectedPatJetsAK4PFPuppi_eta,
+    "phi" : t.selectedPatJetsAK4PFPuppi_phi,
+    "M" : t.selectedPatJetsAK4PFPuppi_mass,
+  },
+  behavior = vector.behavior,
+  with_name = 'PtEtaPhiMLorentzVector'
 )
+print("made jets")
 
-output["sumw"][dataset] += len(data)
-output["mass"].fill(
-    dataset=dataset,
-    mass=mass[Zsel],
-    nMyJets=ak.num(jet4vec),
-    nCmsJets=ak.num(data['Jet_pt'])
-)
-output['myJets'].fill(
-    dataset=dataset,
-    pt=ak.flatten(jet4vec.pt, axis=None),
-    eta=ak.flatten(jet4vec.eta, axis=None),
-    phi=ak.flatten(jet4vec.phi, axis=None),
-    npart=ak.flatten(ak.num(parts, axis=2), axis=None)
-)
+jetIdx = t.selectedPatJetsAK4PFPuppiPFCands_jetIdx
+PFCIdx = t.selectedPatJetsAK4PFPuppiPFCands_pFCandsIdx
 
-output['cmsswJets'].fill(
-    dataset=dataset,
-    pt=ak.flatten(data['Jet_pt'],axis=None),
-    eta=ak.flatten(data['Jet_eta'], axis=None),
-    phi=ak.flatten(data['Jet_phi'], axis=None),
-    npart=ak.flatten(data["Jet_nConstituents"], axis=None)
-)
+import fastjet
+jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+cluster = fastjet.ClusterSequence(parts, jetdef)
+jetParts = cluster.constituents(30)
 
-print(ak.type(jet4vec))
-print(ak.type(parts))
-print(ak.count(jet4vec))
-print(ak.count(data['Jet_pt']))
+import eec
+eec_ls = eec.EECLongestSide(2, 20, axis_range=(1e-5,1))
+
+flatParts= ak.flatten(jetParts, axis=1) #remove event axis
+#stack (pt, eta, phi, charge)
+flatParts = ak.concatenate( (flatParts.pt[:,:,None], 
+                             flatParts.eta[:,:,None], 
+                             flatParts.phi[:,:,None], 0), axis=2) 
+
+eec_ls(flatParts)
+midbins = eec_ls.bin_centers()
+binedges = eec_ls.bin_edges()
+binwidths = (binedges[1:]) - (binedges[:-1])
+histo, errs = eec_ls.get_hist_errs(0, False)
+
+myEEC = hist.Hist(hist.axis.Regular(20, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log))
+myEEC.fill(ak.flatten(t.EEC2_dRs), weight=ak.flatten(t.EEC2_wts))

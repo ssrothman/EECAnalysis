@@ -1,53 +1,59 @@
 import json
-import uproot
-import numpy as np
-from types import SimpleNamespace
-from time import time
-from scipy.special import comb
 import pickle
+from time import time
+from types import SimpleNamespace
+
+import numpy as np
+import uproot
+from coffea import nanoevents
+from scipy.special import comb
 
 from processing.EECProcessor import EECProcessor
 from processing.LumiProcessor import LumiProcessor
-from coffea import nanoevents
 
 #read in json config
-with open("config.json", 'r') as f:
+remote = True
+configName = "config_PUPPI.json"
+fileSet = "fileset_full.json"
+
+configName = "configs/%s"%configName
+fileSet = "filesets/%s"%fileSet
+
+with open(configName, 'r') as f:
   args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
 print("read in config")
 
-from coffea.nanoevents import NanoEventsFactory, BaseSchema
-
 from coffea import processor
+from coffea.nanoevents import BaseSchema, NanoEventsFactory, NanoAODSchema
 
 #from fileset import fileset
 
-remote = False
 if remote:
+  import time
+
   from distributed import Client
   from lpcjobqueue import LPCCondorCluster
-  import time
   tic = time.time()
 
   cluster = LPCCondorCluster(ship_env=True,
                             transfer_input_files=['processing', 'corrections'],
                             memory='12GB')
-  cluster.adapt(minimum=1, maximum=100)
+  cluster.adapt(minimum=5, maximum=100)
   client = Client(cluster)
 
   exe_args = {
     "client" : client,
     "savemetrics" : True,
-    "schema" : nanoevents.BaseSchema,
+    "schema" : NanoAODSchema,
     "align_clusters" : True
   }
 
-  proc = EECProcessor(list(['DoubleMuon','DYJetsToLL']))
+  proc = EECProcessor(args)
   
   print("Waiting for at least one worker...")
   client.wait_for_workers(1)
   hists, metrics = processor.run_uproot_job(
-    "fileset_full.json",
-
+    fileSet,
     treename="Events",
     processor_instance=proc,
     executor = processor.dask_executor,
@@ -60,25 +66,26 @@ if remote:
   print(f"Metrics: {metrics}")
   print(f"Finished in {elapsed:.1f}s")
   print(f"Events/s: {metrics['entries'] / elapsed:.0f}")
-  with open("output/hists.pickle", 'wb') as f:
+  with open(args.histname, 'wb') as f:
     pickle.dump(hists, f)
-  with open("output/metrics.pickle", 'wb') as f:
+  with open(args.metricname, 'wb') as f:
     pickle.dump(metrics, f)
 else:
   runner = processor.Runner(
     executor = processor.IterativeExecutor(compression=None, workers=4),
-    schema=BaseSchema,
+    schema=NanoAODSchema,
     #maxchunks=4,
     chunksize = 10000000
   )
 
   out = runner(
-    "fileset.json",
+    fileSet,
     treename='Events',
-    processor_instance=EECProcessor(list(['DoubleMuon','DYJetsToLL'])),
+    processor_instance=EECProcessor(args),
   )
 
-  with open(args.outname, 'wb') as f:
+  print(args.histname)
+  with open(args.histname, 'wb') as f:
     pickle.dump(out, f)
 
   print(out)
