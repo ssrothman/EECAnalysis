@@ -8,11 +8,16 @@ import matplotlib.pyplot as plt
 XSEC =  (6077.22) * 1000  #in fb
 #LUMI = 0.080401481 / 2#in fb-1 #fudge factor of 2
 LUMI = 7.545787391 #in fb-1
+LUMI_PM = 2 #in percent
+XSEC_PM = 5 #in percent
+
+ratio_pm = np.sqrt(np.square(LUMI_PM/100) + np.square(XSEC_PM/100))*100
+print(ratio_pm)
 
 #xsec twiki: https://twiki.cern.ch/twiki/bin/viewauth/CMS/StandardModelCrossSectionsat13TeV
 #pdmv 2017: https://twiki.cern.ch/twiki/bin/view/CMS/DCUserPage2017Analysis#13_TeV_pp_runs_Legacy_2017_aka_U
 
-with open("output/Full07-12-2022.hist.pickle", 'rb') as f:
+with open("output/hists_test.pickle", 'rb') as f:
 #with open("out.pickle", 'rb') as f:
     acc = pickle.load(f)
 
@@ -24,7 +29,7 @@ doEEC = False
 doZ = False
 doMu = False
 doEECpt = False
-doEECorder = True
+doEECorder = False
 
 def dataMC(MC, DATA, axis, fname):
     '''
@@ -67,10 +72,16 @@ def dataMC(MC, DATA, axis, fname):
     main_ax.set_ylabel("Events per fb-1")
     main_ax.legend()
 
-    subplot_ax.errorbar(centers, ratio, fmt='o', xerr=widths/2, color='k')
+    #TODO: validate the changes here
+    subplot_ax.errorbar(centers, ratio, yerr=ratio*ratio_pm/100, fmt='o', xerr=widths/2, color='k')
     subplot_ax.set_ylabel("Data/MC")
     subplot_ax.set_xlabel(dataHist.axes[0].label)
-    #subplot_ax.axhline(1.0, color='k', alpha=0.5, linestyle='--')
+    subplot_ax.axhline(1.0, color='k', alpha=0.5, linestyle='--')
+    bottom, top = subplot_ax.get_ylim()
+    if bottom>0.95:
+        subplot_ax.set_ylim(bottom=0.95)
+    if top<1.05:
+        subplot_ax.set_ylim(top=1.05)
 
     plt.savefig(fname, format='png', bbox_inches='tight')
     plt.clf()

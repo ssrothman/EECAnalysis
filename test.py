@@ -10,7 +10,7 @@ import hist
 
 print("about to read")
 #t = uproot.open("nano_mc2017_105.root:Events")
-t = NanoEventsFactory.from_root("nano_mc2017.root", schemaclass=BaseSchema, entry_start=10, entry_stop=11).events()
+t = NanoEventsFactory.from_root("nano_mc2017_105.root", schemaclass=NanoAODSchema).events()
 print("read")
 
 parts = ak.zip({

@@ -12,9 +12,9 @@ from processing.EECProcessor import EECProcessor
 from processing.LumiProcessor import LumiProcessor
 
 #read in json config
-remote = True
+remote = False
 configName = "config_PUPPI.json"
-fileSet = "fileset_full.json"
+fileSet = "fileset_test.json"
 
 configName = "configs/%s"%configName
 fileSet = "filesets/%s"%fileSet
