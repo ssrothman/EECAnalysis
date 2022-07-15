@@ -3,11 +3,6 @@ import pickle
 from time import time
 from types import SimpleNamespace
 
-import numpy as np
-import uproot
-from coffea import nanoevents
-from scipy.special import comb
-
 from processing.EECProcessor import EECProcessor
 from processing.LumiProcessor import LumiProcessor
 
@@ -24,7 +19,7 @@ with open(configName, 'r') as f:
 print("read in config")
 
 from coffea import processor
-from coffea.nanoevents import BaseSchema, NanoEventsFactory, NanoAODSchema
+from coffea.nanoevents import NanoAODSchema
 
 #from fileset import fileset
 

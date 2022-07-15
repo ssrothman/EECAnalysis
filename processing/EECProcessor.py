@@ -114,10 +114,7 @@ class EECProcessor(processor.ProcessorABC):
         mu2 = muons[:,1]
 
         #Z bosons
-        print(mu1.phi)
-        print(mu2.phi)
         Z = muons[:,0] + muons[:,1]
-        print(Z.phi)
 
         numerator = np.sqrt(Z.mass*Z.mass + Z.pt*Z.pt*np.square(np.cosh(Z.eta))) + Z.pt * np.sinh(Z.eta)
         denominator = np.sqrt(Z.mass*Z.mass + Z.pt*Z.pt)
@@ -151,6 +148,9 @@ class EECProcessor(processor.ProcessorABC):
 
         #apply jetID
         goodjets = np.logical_and(goodjets, jets.jetId==7)
+
+        #apply min pT
+        goodjets = np.logical_and(goodjets, jets.pt > self.args.minJetPt)
 
         jets.bTagLoose = jets.btagDeepFlavB > 0.0532
         jets.bTagMedium = jets.btagDeepFlavB > 0.304

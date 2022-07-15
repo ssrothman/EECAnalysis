@@ -30,9 +30,8 @@
 
   "jetSize":0.4,
   "jetArbitration" :"all",
-
   "minJetPt":12,
-  "minPfCandPt":0,
+  
   "fileset":"fileset.json",
   "histname" : "output/hists_test.pickle",
   "metricname" : "output/metrics_test.pickle"
