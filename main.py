@@ -7,9 +7,9 @@ from processing.EECProcessor import EECProcessor
 from processing.LumiProcessor import LumiProcessor
 
 #read in json config
-remote = False
+remote = True
 configName = "config_PUPPI.json"
-fileSet = "fileset_test.json"
+fileSet = "fileset_full.json"
 
 configName = "configs/%s"%configName
 fileSet = "filesets/%s"%fileSet
@@ -30,10 +30,10 @@ if remote:
   from lpcjobqueue import LPCCondorCluster
   tic = time.time()
 
-  cluster = LPCCondorCluster(ship_env=True,
+  cluster = LPCCondorCluster(ship_env=False,
                             transfer_input_files=['processing', 'corrections'],
-                            memory='12GB')
-  cluster.adapt(minimum=5, maximum=100)
+                            memory='16GB')
+  cluster.adapt(minimum=10, maximum=100)
   client = Client(cluster)
 
   exe_args = {
@@ -45,8 +45,8 @@ if remote:
 
   proc = EECProcessor(args)
   
-  print("Waiting for at least one worker...")
-  client.wait_for_workers(1)
+  print("Waiting for at least five workers...")
+  client.wait_for_workers(5)
   hists, metrics = processor.run_uproot_job(
     fileSet,
     treename="Events",

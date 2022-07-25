@@ -8,9 +8,12 @@ from coffea.nanoevents.methods import vector, candidate
 import hist
 from vector import dim
 from .Histogram import Histogram
+from .roccor import kScaleDT, kSpreadMC#, kSmearMC
 
 from coffea import processor
 from coffea.lookup_tools import extractor, evaluator
+
+import correctionlib
 
 ak.behavior.update(candidate.behavior)
 ak.behavior.update(vector.behavior)
@@ -33,25 +36,64 @@ https://twiki.cern.ch/twiki/bin/view/CMS/TopTrigger
 https://twiki.cern.ch/twiki/bin/viewauth/CMS/MuonHLT2017
 '''
 
+def compute_dR(phiGen, phiReco, etaGen, etaReco):
+    '''
+    assume exactly two reco particles
+    '''
+    idxs = ak.argcartesian( (etaGen, etaReco), axis=1)
+
+    genetas = etaGen[idxs[:,:,'0']]
+    recoetas = etaReco[idxs[:,:,'1']]
+    
+    genphis = phiGen[idxs[:,:,'0']]
+    recophis = phiReco[idxs[:,:,'1']]
+
+    dphis = np.abs(genphis-recophis)
+    gt = dphis>np.pi
+    dphis = gt * (2*np.pi - dphis) + (1-gt)*(dphis)
+    
+    detas = np.abs(genetas-recoetas)
+
+    dRs = np.sqrt(dphis*dphis + detas*detas)
+
+    mu1 = idxs[:,:,'1'] == 0
+    mu2 = idxs[:,:,'1'] == 1
+
+    dRmu1 = dRs[mu1]
+    dRmu2 = dRs[mu2]
+
+    match1 = ak.argmin(dRmu1, axis=1, keepdims=True)
+    match2 = ak.argmin(dRmu2, axis=1, keepdims=True)
+    
+    genId1 = idxs[mu1][match1][:,:,'0']
+    genId2 = idxs[mu2][match2][:,:,'1']
+
+    genId = ak.concatenate( (genId1, genId2), axis=-1)
+    dR = ak.concatenate( (dRmu1, dRmu2), -1)
+
+    return dR, genId
+
 class EECProcessor(processor.ProcessorABC):
     def __init__(self, args):
         self.args = args
     
-        ext = extractor()
-        ext.add_weight_sets([
-                            "ID NUM_TightID_DEN_genTracks_pt_abseta corrections/muonSF/RunBCDEF_ID_syst.histo.root",
-                            "IDstat NUM_TightID_DEN_genTracks_pt_abseta_stat corrections/muonSF/RunBCDEF_ID_syst.histo.root",
-                            "IDsyst NUM_TightID_DEN_genTracks_pt_abseta_syst corrections/muonSF/RunBCDEF_ID_syst.histo.root",
-                            
-                            "ISO NUM_TightRelIso_DEN_TightIDandIPCut_pt_abseta corrections/muonSF/RunBCDEF_ISO_syst.histo.root",
-                            "ISOstat NUM_TightRelIso_DEN_TightIDandIPCut_pt_abseta_stat corrections/muonSF/RunBCDEF_ISO_syst.histo.root",
-                            "ISOsyst NUM_TightRelIso_DEN_TightIDandIPCut_pt_abseta_syst corrections/muonSF/RunBCDEF_ISO_syst.histo.root",
+        #ext = extractor()
+        #ext.add_weight_sets([
+        #                    "ID NUM_TightID_DEN_genTracks_pt_abseta corrections/muonSF/RunBCDEF_ID_syst.histo.root",
+        #                    "IDstat NUM_TightID_DEN_genTracks_pt_abseta_stat corrections/muonSF/RunBCDEF_ID_syst.histo.root",
+        #                    "IDsyst NUM_TightID_DEN_genTracks_pt_abseta_syst corrections/muonSF/RunBCDEF_ID_syst.histo.root",
+        #                    
+        #                    "ISO NUM_TightRelIso_DEN_TightIDandIPCut_pt_abseta corrections/muonSF/RunBCDEF_ISO_syst.histo.root",
+        #                    "ISOstat NUM_TightRelIso_DEN_TightIDandIPCut_pt_abseta_stat corrections/muonSF/RunBCDEF_ISO_syst.histo.root",
+        #                    "ISOsyst NUM_TightRelIso_DEN_TightIDandIPCut_pt_abseta_syst corrections/muonSF/RunBCDEF_ISO_syst.histo.root",
+        #
+        #                    "TRG IsoMu27_PtEtaBins/pt_abseta_ratio corrections/muonSF/EfficienciesAndSF_RunBtoF_Nov17Nov2017.histo.root"
+        #    ])
+        #ext.finalize()
+        #
+        #self.SFeval = ext.make_evaluator()
 
-                            "TRG IsoMu27_PtEtaBins/pt_abseta_ratio corrections/muonSF/EfficienciesAndSF_RunBtoF_Nov17Nov2017.histo.root"
-            ])
-        ext.finalize()
-
-        self.SFeval = ext.make_evaluator()
+        self.cset = correctionlib.CorrectionSet.from_file("corrections/muon_Z.json")
 
     @property
     def accumulator(self):
@@ -110,8 +152,24 @@ class EECProcessor(processor.ProcessorABC):
 
         #muons
         muons = data[self.args.muons]
+
+        #rochester corrections
+        if not isMC:
+            rcSF = kScaleDT(muons.charge, muons.pt, muons.eta, muons.phi, 0, 0)
+        else:
+            genParts = data[self.args.genParts]
+            genMuons = genParts[np.abs(genParts.pdgId)==13]
+            
+            dR, genId = compute_dR(genMuons.phi, muons.phi, genMuons.eta, muons.eta)
+            match = genMuons[genId]
+
+            rcSF = kSpreadMC(muons.charge, muons.pt, muons.eta, muons.phi, match.pt, 0, 0)
+        
+        muons['pt'] = muons.pt*rcSF
+
         mu1 = muons[:,0]
         mu2 = muons[:,1]
+
 
         #Z bosons
         Z = muons[:,0] + muons[:,1]
@@ -165,6 +223,9 @@ class EECProcessor(processor.ProcessorABC):
 
         jets.tagFlav = 2*jets.bTagTight + 1*jets.cTagTight
 
+        #jet pT rank
+        jets.pTrank = ak.local_index(jets, axis=-1)
+
         #genJets
         if isMC:
             #compute gen flavor
@@ -197,69 +258,87 @@ class EECProcessor(processor.ProcessorABC):
         #scale factors
         if isMC:
             evtwt = data.genWeight
-            trgSF = self.SFeval['TRG'](mu1.pt, np.abs(mu1.eta))
-            idSF1 = self.SFeval['ID'](mu1.pt, np.abs(mu1.eta))
-            idSF2 = self.SFeval['ID'](mu2.pt, np.abs(mu2.eta))
-            isoSF1 = self.SFeval['ISO'](mu1.pt, np.abs(mu1.eta))
-            isoSF2 = self.SFeval['ISO'](mu2.pt, np.abs(mu2.eta))
-            evtwt = evtwt*trgSF*idSF1*idSF2*isoSF1*isoSF2
+            recoSF1 = self.cset['NUM_TrackerMuons_DEN_genTracks'].evaluate('2017_UL', np.asarray(np.abs(mu1.eta)), np.asarray(mu1.pt), 'sf')
+            recoSF2 = self.cset['NUM_TrackerMuons_DEN_genTracks'].evaluate('2017_UL', np.asarray(np.abs(mu2.eta)), np.asarray(mu2.pt), 'sf')
+            
+            idSF1 = self.cset['NUM_TightID_DEN_TrackerMuons'].evaluate('2017_UL', np.asarray(np.abs(mu1.eta)), np.asarray(mu1.pt), 'sf')
+            idSF2 = self.cset['NUM_TightID_DEN_TrackerMuons'].evaluate('2017_UL', np.asarray(np.abs(mu2.eta)), np.asarray(mu2.pt), 'sf')
+            
+            isoSF1 = self.cset['NUM_TightRelIso_DEN_TightIDandIPCut'].evaluate('2017_UL', np.asarray(np.abs(mu1.eta)), np.asarray(mu1.pt), 'sf')
+            isoSF2 = self.cset['NUM_TightRelIso_DEN_TightIDandIPCut'].evaluate('2017_UL', np.asarray(np.abs(mu2.eta)), np.asarray(mu2.pt), 'sf')
+            
+            trgSF = self.cset['NUM_IsoMu27_DEN_CutBasedIdTight_and_PFIsoTight'].evaluate('2017_UL', np.asarray(np.abs(mu1.eta)), np.asarray(mu1.pt), 'sf')
+
+            evtwt = evtwt*trgSF*idSF1*idSF2*isoSF1*isoSF2*recoSF1*recoSF2
         else:
             evtwt = ak.ones_like(ak.num(jets,axis=-1))
         
         output[dataset]["nJets"] = hist.Hist(
             hist.axis.Regular(10, 0, 10, name="nJets", label="nJets"),
+            storage=hist.storage.Weight()
         )
 
         if isMC:
             output[dataset]["jets"] = hist.Hist(
-                hist.axis.Regular(100, 0, 1000, name='pT', label='$p_{T,Jet}$'),
-                hist.axis.Regular(100, -5, 5, name='eta', label='$\eta_{Jet}$'),
+                hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,Jet}$'),
+                hist.axis.Regular(50, -5, 5, name='eta', label='$\eta_{Jet}$'),
                 hist.axis.Regular(10, -np.pi, np.pi, name='phi', label='$\phi_{Jet}$', circular=True),
+                hist.axis.Integer(0, 2, name='pTrank', label='pTrank'),
                 hist.axis.IntCategory([0, 1, 2, 3, 4], name='flav', label='Flavor'),
                 hist.axis.IntCategory([0, 1, 2, 3], name='tag', label='Tagged Flavor'),
-                hist.axis.Regular(25, 0, 50, name='nConstituents', label='$N_{Constituents}$')
+                hist.axis.Regular(25, 0, 50, name='nConstituents', label='$N_{Constituents}$'),
+                storage=hist.storage.Weight()
             )
         else:
             output[dataset]["jets"] = hist.Hist(
-                hist.axis.Regular(100, 0, 1000, name='pT', label='$p_{T,Jet}$'),
-                hist.axis.Regular(100, -5, 5, name='eta', label='$\eta_{Jet}$'),
+                hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,Jet}$'),
+                hist.axis.Regular(50, -5, 5, name='eta', label='$\eta_{Jet}$'),
                 hist.axis.Regular(10, -np.pi, np.pi, name='phi', label='$\phi_{Jet}$', circular=True),
+                hist.axis.Integer(0, 2, name='pTrank', label='pTrank'),
                 hist.axis.IntCategory([0, 1, 2, 3], name='tag', label='Tagged Flavor'),
-                hist.axis.Regular(25, 0, 50, name='nConstituents', label='$N_{Constituents}$')
+                hist.axis.Regular(25, 0, 50, name='nConstituents', label='$N_{Constituents}$'),
+                storage=hist.storage.Weight()
             )
 
         output[dataset]['dimuon'] = hist.Hist(
-            hist.axis.Regular(100, self.args.Zsel.minMass, self.args.Zsel.maxMass, name='mass', label='$m_{\mu\mu}$'),
-            hist.axis.Regular(100, 0, 1000, name='pT', label='$p_{T,\mu\mu}$'),
-            hist.axis.Regular(100, -5, 5, name='y', label='$y{\mu\mu}$'),
-            hist.axis.Regular(10,-np.pi,np.pi,name='phi', label='$\phi_{\mu\mu}$', circular=True)
+            hist.axis.Regular(50, self.args.Zsel.minMass, self.args.Zsel.maxMass, name='mass', label='$m_{\mu\mu}$'),
+            hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,\mu\mu}$'),
+            hist.axis.Regular(50, -5, 5, name='y', label='$y{\mu\mu}$'),
+            hist.axis.Regular(10,-np.pi,np.pi,name='phi', label='$\phi_{\mu\mu}$', circular=True),
+            storage=hist.storage.Weight()
         )
         output[dataset]['muon'] = hist.Hist(
-            hist.axis.Regular(100, 0, 1000, name='pT', label='$p_{T,\mu}$'),
-            hist.axis.Regular(100, -5, 5, name='eta', label='$\eta_{\mu}$'),
-            hist.axis.Regular(10,-np.pi,np.pi,name='phi', label='$\phi_{\mu}$', circular=True)
+            hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,\mu}$'),
+            hist.axis.Regular(50, -5, 5, name='eta', label='$\eta_{\mu}$'),
+            hist.axis.Regular(10,-np.pi,np.pi,name='phi', label='$\phi_{\mu}$', circular=True),
+            storage=hist.storage.Weight()
         )
         for i in range(2, 7):
             if isMC:
                 output[dataset]['EEC%d'%i] = hist.Hist(
-                    hist.axis.Regular(100, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
-                    hist.axis.Regular(20, 0, 1000, name='pT', label='$p_{T,Jet}$'),
+                    hist.axis.Regular(50, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
+                    hist.axis.Regular(10, 0, 500, name='pT', label='$p_{T,Jet}$'),
                     hist.axis.Regular(10, 0, 5, name='eta', label='$\eta_{Jet}$'),
                     hist.axis.IntCategory([0,1,2,3,4], name='flav', label='Flavor'),
-                    hist.axis.IntCategory([0, 1, 2, 3], name='tag', label='Tagged Flavor')
+                    hist.axis.IntCategory([0, 1, 2, 3], name='tag', label='Tagged Flavor'),
+                    hist.axis.Integer(0, 2, name='pTrank', label='pTrank'),
+                    storage=hist.storage.Weight()
                 )
 
-                output[dataset]['genEEC%d'%i] = hist.Hist(
-                    hist.axis.Regular(100, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
-                    hist.axis.Regular(20, 0, 1000, name='pT', label='$p_{T,Jet}$'),
-                    hist.axis.Regular(10, 0, 5, name='eta', label='$\eta_{Jet}$')
-                )
+                #output[dataset]['genEEC%d'%i] = hist.Hist(
+                #    hist.axis.Regular(100, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
+                #    hist.axis.Regular(20, 0, 1000, name='pT', label='$p_{T,Jet}$'),
+                #    hist.axis.Regular(10, 0, 5, name='eta', label='$\eta_{Jet}$'),
+                #    storage=hist.storage.Weight()
+                #)
             else:
                 output[dataset]['EEC%d'%i] = hist.Hist(
-                    hist.axis.Regular(100, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
-                    hist.axis.Regular(20, 0, 1000, name='pT', label='$p_{T,Jet}$'),
+                    hist.axis.Regular(50, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
+                    hist.axis.Regular(10, 0, 500, name='pT', label='$p_{T,Jet}$'),
                     hist.axis.Regular(10, 0, 5, name='eta', label='$\eta_{Jet}$'),
-                    hist.axis.IntCategory([0, 1, 2, 3], name='tag', label='Tagged Flavor')
+                    hist.axis.IntCategory([0, 1, 2, 3], name='tag', label='Tagged Flavor'),
+                    hist.axis.Integer(0, 2, name='pTrank', label='pTrank'),
+                    storage=hist.storage.Weight()
                 )
 
         output[dataset]['nJets'].fill(
@@ -276,7 +355,8 @@ class EECProcessor(processor.ProcessorABC):
                 weight=ak.flatten(castedweight[goodjets], axis=None),
                 flav = ak.flatten(jets.genFlav[goodjets]),
                 tag = ak.flatten(jets.tagFlav[goodjets]),
-                nConstituents = ak.flatten(jets.nConstituents[goodjets], axis=None)
+                nConstituents = ak.flatten(jets.nConstituents[goodjets], axis=None),
+                pTrank = ak.flatten(jets.pTrank[goodjets])
             )
         else:
             output[dataset]['jets'].fill(
@@ -285,7 +365,8 @@ class EECProcessor(processor.ProcessorABC):
                 phi = ak.flatten(jets.phi[goodjets], axis=None),
                 weight=ak.flatten(castedweight[goodjets], axis=None),
                 tag = ak.flatten(jets.tagFlav[goodjets], axis=None),
-                nConstituents = ak.flatten(jets.nConstituents[goodjets], axis=None)
+                nConstituents = ak.flatten(jets.nConstituents[goodjets], axis=None),
+                pTrank = ak.flatten(jets.pTrank[goodjets])
             )
 
         for i in range(2, 7):
@@ -297,18 +378,20 @@ class EECProcessor(processor.ProcessorABC):
                               goodjets,
                               evtwt,
                               doFlav=isMC,
-                              doTag = True)
+                              doTag = True,
+                              doRank = True)
         
-            if isMC:
-                name = "genEEC%d"%i
-                EEC = data[name]
-                self.fillProjectedEEC(output[dataset][name], 
-                                EEC,
-                                genJets,
-                                goodgenjets,
-                                evtwt,
-                                doFlav=False,
-                                doTag = False)
+            #if isMC:
+            #    name = "genEEC%d"%i
+            #    EEC = data[name]
+            #    self.fillProjectedEEC(output[dataset][name], 
+            #                    EEC,
+            #                    genJets,
+            #                    goodgenjets,
+            #                    evtwt,
+            #                    doFlav=False,
+            #                    doTag = False,
+            #                    doRank = False)
 
         castedweight = ak.broadcast_arrays(evtwt, Z.pt)[0]
         output[dataset]['dimuon'].fill(
@@ -340,7 +423,7 @@ class EECProcessor(processor.ProcessorABC):
     def postprocess(self, accumulator):
         return accumulator
     
-    def fillProjectedEEC(self, hist, EEC, jets, goodJets, evtWt, doFlav, doTag):
+    def fillProjectedEEC(self, hist, EEC, jets, goodJets, evtWt, doFlav, doTag, doRank):
         dRs = EEC.dRs
         wts = EEC.wts
         jetIdx = EEC.jetIdx
@@ -356,43 +439,22 @@ class EECProcessor(processor.ProcessorABC):
         jetPt = jets.pt[jetIdx]
         jetEta = jets.eta[jetIdx]
 
+        fillvars = {
+            "dR" : ak.flatten(dRs, axis=None),
+            "weight" : ak.flatten(wts*evtWt, axis=None),
+            "pT" : ak.flatten(jetPt, axis=None),
+            "eta" : ak.flatten(jetEta, axis=None)
+        }
+
         if doFlav:
-            jetFlav = jets.genFlav[jetIdx]
-            
-            if doTag:
-                tagFlav = jets.tagFlav[jetIdx]
+            fillvars["flav"] = ak.flatten(jets.genFlav[jetIdx], axis=None)
+        
+        if doTag:
+            fillvars["tag"] = ak.flatten(jets.tagFlav[jetIdx], axis=None)
 
-                hist.fill(
-                    dR = ak.flatten(dRs, axis=None),
-                    weight = ak.flatten(wts * evtWt, axis=None),
-                    pT = ak.flatten(jetPt, axis=None),
-                    eta = np.abs(ak.flatten(jetEta, axis=None)),
-                    flav = ak.flatten(jetFlav, axis=None),
-                    tag = ak.flatten(tagFlav, axis=None)
-                )
-            else:
-                hist.fill(
-                    dR = ak.flatten(dRs, axis=None),
-                    weight = ak.flatten(wts * evtWt, axis=None),
-                    pT = ak.flatten(jetPt, axis=None),
-                    eta = np.abs(ak.flatten(jetEta, axis=None)),
-                    flav = ak.flatten(jetFlav, axis=None)
-                )
-        else:
-            if doTag:
-                tagFlav = jets.tagFlav[jetIdx]
+        if doRank:
+            fillvars["pTrank"] = ak.flatten(jets.pTrank[jetIdx], axis=None)
 
-                hist.fill(
-                    dR = ak.flatten(dRs, axis=None),
-                    weight = ak.flatten(wts * evtWt, axis=None),
-                    pT = ak.flatten(jetPt, axis=None),
-                    eta = np.abs(ak.flatten(jetEta, axis=None)),
-                    tag = ak.flatten(tagFlav, axis=None)
-                )
-            else:
-                hist.fill(
-                    dR = ak.flatten(dRs, axis=None),
-                    weight = ak.flatten(wts * evtWt, axis=None),
-                    pT = ak.flatten(jetPt, axis=None),
-                    eta = np.abs(ak.flatten(jetEta, axis=None))
-                )
+        #print(hist)
+        #print(fillvars)
+        hist.fill(**fillvars)
