@@ -16,15 +16,17 @@ def mkdir(path, exist_ok=False):
 XSEC =  (6077.22) * 1000  #in fb
 #LUMI = 0.080401481 / 2#in fb-1 #fudge factor of 2
 LUMI = 7.545787391 #in fb-1
-LUMI_PM = 2 #in percent
-XSEC_PM = 5 #in percent
+lumi_err = 0.023 * LUMI
 
-ratio_pm = np.sqrt(np.square(LUMI_PM/100) + np.square(XSEC_PM/100))*100
+xsec_err = np.sqrt( 
+    np.square(0.0149 * XSEC)  #integration 
+    + np.square(0.1478*XSEC)  #pdf
+    + np.square(0.02 * XSEC)) #scale
 
 #xsec twiki: https://twiki.cern.ch/twiki/bin/viewauth/CMS/StandardModelCrossSectionsat13TeV
 #pdmv 2017: https://twiki.cern.ch/twiki/bin/view/CMS/DCUserPage2017Analysis#13_TeV_pp_runs_Legacy_2017_aka_U
 
-name = "Full07-23-2022"
+name = "Full08-01-2022.kin"
 
 with open("output/%s.hist.pickle"%name, 'rb') as f:
 #with open("out.pickle", 'rb') as f:
@@ -36,20 +38,22 @@ kinDir = "figures/%s/KinDataMC"%name
 EECdataMCdir = "figures/%s/EECDataMC"%name
 EECflavordir = "figures/%s/EECflavor"%name
 EECrankdir = "figures/%s/EECrank"%name
+EECtagdir = "figures/%s/EECtag"%name
 
 effective_lumi = acc['DYJetsToLL']['sumw']/XSEC
-est_lumi = acc['DoubleMuon']['sumw']/XSEC
+effective_lumi_err = xsec_err/XSEC * effective_lumi
 
 print("Data luminosity:",LUMI)
 print("Effective MC luminosity",effective_lumi)
 
-doJets = False
+doJets = True
 doJetsFlavor = False
-doZ = False
-doMu = False
+doZ = True
+doMu = True
 doEECdataMC = False
 doEECflavor = False
-doEECrank = True
+doEECrank = False
+doEECtag = False
 
 def dataMC(MC, DATA, axis, fname):
     '''
@@ -76,24 +80,27 @@ def dataMC(MC, DATA, axis, fname):
     bins = dataHist.axes[0].edges
     widths = dataHist.axes[0].widths
 
-    #TODO: figure out exactly how the scaling should work
-    #TODO: error bars?
     print(fname)
-    #print(effective_lumi/LUMI)
-    #print(mcHist.sum().value/dataHist.sum().value)
-    mcValues = mcHist.values()/effective_lumi #* dataHist.sum().value/mcHist.sum().value
+
+    mcValues = mcHist.values()/effective_lumi
+    mcErrs = np.sqrt(mcHist.variances())/effective_lumi
+    #mcErrs = np.sqrt( np.square(mcErrs/mcValues) + np.square(effective_lumi_err/effective_lumi)) * mcValues
+
     dataValues = dataHist.values()/LUMI
-    #print(mcValues.sum().value/dataValues.sum().value)
-    #print()
+    dataErrs = np.sqrt(dataHist.variances())/LUMI
+    #dataErrs = np.sqrt( np.square(dataErrs/dataValues) + np.square(lumi_err/LUMI))
+
     ratio = dataValues/mcValues 
+    ratioerr = np.sqrt(np.square(dataErrs/dataValues) + np.square(mcErrs/mcValues))*ratio
 
     hep.histplot(mcValues, bins, density=False, histtype='step', ax=main_ax, label='MC')
-    hep.histplot(dataValues, bins, density=False, histtype='errorbar', ax=main_ax, color='k', label='DATA')
+    main_ax.errorbar(centers, dataValues, yerr = dataErrs, color='k', label="DATA", fmt='o')
+    #hep.histplot(dataValues, bins, density=False, histtype='errorbar', ax=main_ax, color='k', label='DATA')
     main_ax.set_ylabel("Events per fb-1")
     main_ax.legend()
 
     #TODO: validate the changes here
-    subplot_ax.errorbar(centers, ratio, yerr=ratio*ratio_pm/100, fmt='o', xerr=widths/2, color='k')
+    subplot_ax.errorbar(centers, ratio, yerr=ratioerr, fmt='o', xerr=widths/2, color='k')
     subplot_ax.set_ylabel("Data/MC")
     subplot_ax.set_xlabel(dataHist.axes[0].label)
     subplot_ax.axhline(1.0, color='k', alpha=0.5, linestyle='--')
@@ -132,6 +139,7 @@ def band(x, y, yerr, label, ax=None):
         ax = plt.gca()
     line = ax.plot(x, y, 'o--', linewidth=1, markersize=2)
     ax.fill_between(x, y-yerr, y+yerr, label=label, color=line[0].get_color(), alpha=0.7)
+    return line
 
 if doEECdataMC:
     mkdir(EECdataMCdir, exist_ok=True)  
@@ -149,11 +157,11 @@ if doEECdataMC:
             
             #print("values",HMC.values())
             #print("sum",HMC.sum().value)
-            histMC = HMC.values()/HMC.sum().value
-            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
+            histMC = HMC.values()/effective_lumi#HMC.sum().value
+            errsMC = np.sqrt(HMC.variances())/effective_lumi#HMC.sum().value
 
-            histDATA = HDATA.values()/HDATA.sum().value
-            errsDATA = np.sqrt(HDATA.variances())/HDATA.sum().value
+            histDATA = HDATA.values()/LUMI#HDATA.sum().value
+            errsDATA = np.sqrt(HDATA.variances())/LUMI#HDATA.sum().value
 
             midbins = HMC.axes[0].centers
             #binwidths = H.axes[0].widths
@@ -203,11 +211,6 @@ if doJetsFlavor:
     hist4 = H[:,4].values()/H[:,4].sum().value
     err4 = np.sqrt(H[:,4].variances())/H[:,4].sum().value
 
-    #plt.errorbar(midbins, hist0/binwidths, yerr = err0/binwidths, fmt='o',lw=1.5,markersize=2, label='undefined')
-    #plt.errorbar(midbins, hist1/binwidths, yerr = err0/binwidths, fmt='o-',lw=1.5,markersize=2, label='light quark')
-    #plt.errorbar(midbins, hist2/binwidths, yerr = err0/binwidths, fmt='o-',lw=1.5,markersize=2, label='gluon')
-    #plt.errorbar(midbins, hist3/binwidths, yerr = err0/binwidths, fmt='o-',lw=1.5,markersize=2, label='charm')
-    #plt.errorbar(midbins, hist4/binwidths, yerr = err0/binwidths, fmt='o-',lw=1.5,markersize=2, label='bottom')
     band(midbins, hist0/binwidths, err0/binwidths, "undefined")
     band(midbins, hist1/binwidths, err1/binwidths, "light quark")
     band(midbins, hist2/binwidths, err2/binwidths, "gluon")
@@ -216,7 +219,7 @@ if doJetsFlavor:
     plt.xlabel("$|\eta|$")
     plt.ylabel("Density")
     plt.legend()
-    plt.savefig("test.png")
+    plt.savefig("%s/jetFlavor.png"%kinDir)
     plt.clf()
 
 if doEECflavor:
@@ -245,6 +248,86 @@ if doEECflavor:
             plt.ylim(bottom=1e-2)
             plt.text(0.35, 1.5e-2, "Jet clustering radius", fontsize=8, rotation=270, va='bottom', ha='right')
             plt.savefig("%s/EEC%dpT%d_MC_flav.png"%(EECflavordir, N,pT), format='png')
+            plt.clf()
+
+if doEECtag:
+    mkdir(EECtagdir, exist_ok=True)  
+    for pT in range(0, 5):
+        for N in range(2, 7):
+            #labels = ['Undefined truth flavor', 'Light quark', 'Gluon', 'Charm', 'Bottom']
+            HISTMC = acc['DYJetsToLL']['EEC%d'%N].project('dR', 'pT', 'tag')[::rebin(2), :, :]
+            HISTDATA = acc['DoubleMuon']['EEC%d'%N].project('dR', 'pT', 'tag')[::rebin(2), :, :]
+
+            #fail both tags
+            HMC = HISTMC[:, 2*pT:2*(pT+1):sum, 0]
+            histMC = HMC.values()/HMC.sum().value
+            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
+            midbins = HMC.axes[0].centers
+            edges = HMC.axes[0].edges
+            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            line = band(midbins, histMC/binwidths, errsMC/binwidths, "fail all")
+
+            HDATA = HISTDATA[:, 2*pT:2*(pT+1):sum, 0]
+            histDATA = HDATA.values()/HMC.sum().value * effective_lumi/LUMI
+            errsDATA = np.sqrt(HDATA.variances())/HMC.sum().value * effective_lumi/LUMI
+            midbins = HMC.axes[0].centers
+            edges = HMC.axes[0].edges
+            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label=None, color=line[0].get_color(), fmt='o', markersize=5)
+
+            #pass ctag
+            HMC = HISTMC[:, 2*pT:2*(pT+1):sum, (1,3)][:,::sum]
+            histMC = HMC.values()/HMC.sum().value
+            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
+            midbins = HMC.axes[0].centers
+            edges = HMC.axes[0].edges
+            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            line = band(midbins, histMC/binwidths, errsMC/binwidths, "pass c tag")
+
+            HDATA = HISTDATA[:, 2*pT:2*(pT+1):sum, (1,3)][:,::sum]
+            histDATA = HDATA.values()/HMC.sum().value * effective_lumi/LUMI
+            errsDATA = np.sqrt(HDATA.variances())/HMC.sum().value * effective_lumi/LUMI
+            midbins = HMC.axes[0].centers
+            edges = HMC.axes[0].edges
+            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label=None, color=line[0].get_color(), fmt='o', markersize=5)
+
+            #pass btag
+            HMC = HISTMC[:, 2*pT:2*(pT+1):sum, (2,3)][:,::sum]
+            histMC = HMC.values()/HMC.sum().value
+            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
+            midbins = HMC.axes[0].centers
+            edges = HMC.axes[0].edges
+            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            line = band(midbins, histMC/binwidths, errsMC/binwidths, "pass b tag")
+
+            HDATA = HISTDATA[:, 2*pT:2*(pT+1):sum, (2,3)][:,::sum]
+            histDATA = HDATA.values()/HMC.sum().value * effective_lumi/LUMI
+            errsDATA = np.sqrt(HDATA.variances())/HMC.sum().value * effective_lumi/LUMI
+            midbins = HMC.axes[0].centers
+            edges = HMC.axes[0].edges
+            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label=None, color=line[0].get_color(), fmt='o', markersize=5)
+
+            #HDATA = histDATA[:, 2*pT:2*(pT+1):sum, 0]
+            #histDATA = HDATA.values()/LUMI
+            #errsDATA = np.sqrt(HDATA.variances())/LUMI
+            #midbins = HDATA.axes[0].centers
+            #edges = HDATA.axes[0].edges
+            #binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+            #plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label='Data', color='k', fmt='o')
+
+            plt.title("%d-point correlator\n$%d < p_T < %d$"%(N, 100*pT, 100*(pT+1)))
+            plt.legend()
+            plt.xlabel("$\Delta R$")
+            plt.ylabel("Projected correlator")
+            plt.axvline(0.4, c='k')
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.xlim(left=1e-3)
+            plt.ylim(bottom=1e-2)
+            plt.text(0.35, 1.5e-2, "Jet clustering radius", fontsize=8, rotation=270, va='bottom', ha='right')
+            plt.savefig("%s/EEC%dpT%d_MC_tag.png"%(EECtagdir, N,pT), format='png')
             plt.clf()
 
 if doEECrank:
