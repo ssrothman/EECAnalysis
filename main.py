@@ -3,16 +3,27 @@ import pickle
 from time import time
 from types import SimpleNamespace
 
+from numpy import True_
+
 from processing.EECProcessor import EECProcessor
 from processing.LumiProcessor import LumiProcessor
 
+from datetime import date
+
 #read in json config
-remote = True
-configName = "config_PUPPI.json"
-fileSet = "fileset_full.json"
+configType = "PUPPI"
+filesetType = "test"
+remote = False
+kind='all'
+
+configName = "config_%s.json"%configType
+fileSet = "fileset_%s.json"%filesetType
 
 configName = "configs/%s"%configName
 fileSet = "filesets/%s"%fileSet
+
+outPrefix = "%s.%s.%s.%s"%(filesetType, date.today().strftime("%m-%d-%Y"), kind, configType)
+print(outPrefix)
 
 with open(configName, 'r') as f:
   args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
@@ -28,12 +39,14 @@ if remote:
 
   from distributed import Client
   from lpcjobqueue import LPCCondorCluster
+
   tic = time.time()
 
   cluster = LPCCondorCluster(ship_env=False,
                             transfer_input_files=['processing', 'corrections'],
-                            memory='16GB')
-  cluster.adapt(minimum=10, maximum=100)
+                            memory='6GB',
+                            shared_temp_directory="/tmp")
+  cluster.adapt(minimum=1, maximum=100)
   client = Client(cluster)
 
   exe_args = {
@@ -43,16 +56,17 @@ if remote:
     "align_clusters" : True
   }
 
-  proc = EECProcessor(args)
+  proc = EECProcessor(args, kind)
   
-  print("Waiting for at least five workers...")
-  client.wait_for_workers(5)
+  print("Waiting for at least one worker...")
+  client.wait_for_workers(1)
   hists, metrics = processor.run_uproot_job(
     fileSet,
     treename="Events",
     processor_instance=proc,
     executor = processor.dask_executor,
     executor_args=exe_args,
+    chunksize=10000
     #maxchunks=10,
   )
 
@@ -61,26 +75,33 @@ if remote:
   print(f"Metrics: {metrics}")
   print(f"Finished in {elapsed:.1f}s")
   print(f"Events/s: {metrics['entries'] / elapsed:.0f}")
-  with open(args.histname, 'wb') as f:
+  
+  with open("output/%s.hist.pickle"%outPrefix, 'wb') as f:
     pickle.dump(hists, f)
-  with open(args.metricname, 'wb') as f:
+  with open("output/%s.metrics.pickle"%outPrefix, 'wb') as f:
     pickle.dump(metrics, f)
+
 else:
   runner = processor.Runner(
-    executor = processor.IterativeExecutor(compression=None, workers=4),
+    executor = processor.IterativeExecutor(compression=None, workers=6),
     schema=NanoAODSchema,
     #maxchunks=4,
     chunksize = 10000000
   )
 
+  #hp = h.heap()
+  #print("top of everything")
+  #print(hp.byrcs)
+  #print()
+
   out = runner(
     fileSet,
     treename='Events',
-    processor_instance=EECProcessor(args),
+    processor_instance=EECProcessor(args, kind),
   )
 
   print(args.histname)
-  with open(args.histname, 'wb') as f:
+  with open("output/%s.hist.pickle"%outPrefix, 'wb') as f:
     pickle.dump(out, f)
 
   print(out)

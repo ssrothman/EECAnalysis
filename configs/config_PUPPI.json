@@ -31,8 +31,14 @@
   "jetSize":0.4,
   "jetArbitration" :"all",
   "minJetPt":12,
+  "maxJetEta":2.4,
   
-  "fileset":"fileset.json",
+  "tag":{
+    "bWP" : 0.7476,
+    "CvsLWP" : 0.52,
+    "CvsBWP" : 0.05
+  },
+
   "histname" : "output/hists_test.pickle",
   "metricname" : "output/metrics_test.pickle"
 }
