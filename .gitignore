@@ -14,3 +14,8 @@ clib/dist/*
 clib/energy_energy_correlators.egg-info/*
 *.pickle
 *.pyc
+*.parquet
+shell
+.bashrc
+.env
+.local/*

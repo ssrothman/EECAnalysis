@@ -5,6 +5,8 @@ import numpy as np
 import awkward as ak
 import matplotlib.pyplot as plt
 import os
+import matplotlib.colors
+import mplhep as hep
 
 def mkdir(path, exist_ok=False):
     try:
@@ -14,7 +16,6 @@ def mkdir(path, exist_ok=False):
             raise e
     
 XSEC =  (6077.22) * 1000  #in fb
-#LUMI = 0.080401481 / 2#in fb-1 #fudge factor of 2
 LUMI = 7.545787391 #in fb-1
 lumi_err = 0.023 * LUMI
 
@@ -26,48 +27,48 @@ xsec_err = np.sqrt(
 #xsec twiki: https://twiki.cern.ch/twiki/bin/viewauth/CMS/StandardModelCrossSectionsat13TeV
 #pdmv 2017: https://twiki.cern.ch/twiki/bin/view/CMS/DCUserPage2017Analysis#13_TeV_pp_runs_Legacy_2017_aka_U
 
-name = "Full08-01-2022.kin"
-
-with open("output/%s.hist.pickle"%name, 'rb') as f:
+name = "full_08-05-2022_PUPPI"
+'''
+with open("test.pickle", 'rb') as f:
 #with open("out.pickle", 'rb') as f:
     acc = pickle.load(f)
+'''
+
+DATAsum = 36321468
+MCsum = 102919490.0
 
 mkdir("figures/%s"%name, exist_ok=True)
 
 kinDir = "figures/%s/KinDataMC"%name
 EECdataMCdir = "figures/%s/EECDataMC"%name
 EECflavordir = "figures/%s/EECflavor"%name
+EECetadir = "figures/%s/EECeta"%name
 EECrankdir = "figures/%s/EECrank"%name
 EECtagdir = "figures/%s/EECtag"%name
+effDir = "figures/%s/efficiency"%name
 
-effective_lumi = acc['DYJetsToLL']['sumw']/XSEC
+
+effective_lumi = MCsum/XSEC
 effective_lumi_err = xsec_err/XSEC * effective_lumi
 
 print("Data luminosity:",LUMI)
 print("Effective MC luminosity",effective_lumi)
 
-doJets = True
-doJetsFlavor = False
-doZ = True
-doMu = True
-doEECdataMC = False
-doEECflavor = False
-doEECrank = False
-doEECtag = False
 
-def dataMC(MC, DATA, axis, fname):
+def band(x, y, yerr, label, ax=None):
+    if ax is None:
+        ax = plt.gca()
+    line = ax.plot(x, y, 'o--', linewidth=1, markersize=2)
+    ax.fill_between(x, y-yerr, y+yerr, label=label, color=line[0].get_color(), alpha=0.7)
+    return line
+
+def dataMC(MC, DATA, axis, fname, slc = slice(None,None,None)):
     '''
     Assumes identical binning between dataHist and mcHist
     NB does not check
     '''
-    mcHist = MC.project(axis)
-    dataHist = DATA.project(axis)
-    #f axis == 'pT':
-    #    mcHist = mcHist[:20]
-    #    dataHist = dataHist[:20]
-    #elif axis != 'phi' and axis != 'nJets' and axis!='dR':
-    #    mcHist = mcHist[::rebin(5)]
-    #    dataHist = dataHist[::rebin(5)]
+    mcHist = MC.project(axis)[slc]
+    dataHist = DATA.project(axis)[slc]
     
     fig = plt.gcf()
     grid = fig.add_gridspec(2, 1, hspace=0, height_ratios=[3, 1])
@@ -113,38 +114,53 @@ def dataMC(MC, DATA, axis, fname):
     plt.savefig(fname, format='png', bbox_inches='tight')
     plt.clf()
 
-if doMu:  
+def doMu():
+    with open("%s/DYJetsToLL/muon/muonsHist.pickle"%name, 'rb') as f:
+        mcHIST = pickle.load(f)
+    with open("%s/DoubleMuon/muon/muonsHist.pickle"%name, 'rb') as f:
+        dataHIST = pickle.load(f)
     mkdir(kinDir, exist_ok=True)  
-    dataMC(acc['DYJetsToLL']['muon'], acc['DoubleMuon']['muon'], 'pT', '%s/muon_pT.png'%kinDir)
-    dataMC(acc['DYJetsToLL']['muon'], acc['DoubleMuon']['muon'], 'eta', '%s/muon_eta.png'%kinDir)
-    #dataMC(acc['DYJetsToLL']['muon'], acc['DoubleMuon']['muon'], 'phi', '%s/muon_phi.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'pT', '%s/muon_pT.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'eta', '%s/muon_eta.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'phi', '%s/muon_phi.png'%kinDir)
 
-if doZ:
+def doZ():
+    with open("%s/DYJetsToLL/dimuon/dimuonsHist.pickle"%name, 'rb') as f:
+        mcHIST = pickle.load(f)
+    with open("%s/DoubleMuon/dimuon/dimuonsHist.pickle"%name, 'rb') as f:
+        dataHIST = pickle.load(f)
     mkdir(kinDir, exist_ok=True)  
-    dataMC(acc['DYJetsToLL']['dimuon'], acc['DoubleMuon']['dimuon'], 'pT', '%s/dimuon_pT.png'%kinDir)
-    dataMC(acc['DYJetsToLL']['dimuon'], acc['DoubleMuon']['dimuon'], 'y', '%s/dimuon_y.png'%kinDir)
-    #dataMC(acc['DYJetsToLL']['dimuon'], acc['DoubleMuon']['dimuon'], 'phi', '%s/dimuon_phi.png'%kinDir)
-    dataMC(acc['DYJetsToLL']['dimuon'], acc['DoubleMuon']['dimuon'], 'mass', '%s/dimuon_mass.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'pT', '%s/dimuon_pT.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'y', '%s/dimuon_y.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'phi', '%s/dimuon_phi.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'mass', '%s/dimuon_mass.png'%kinDir)
 
-if doJets:
+def doJets():
+    with open("%s/DYJetsToLL/jets/jetsHist.pickle"%name, 'rb') as f:
+        mcHIST = pickle.load(f)
+    with open("%s/DoubleMuon/jets/jetsHist.pickle"%name, 'rb') as f:
+        dataHIST = pickle.load(f)
+
     mkdir(kinDir, exist_ok=True)  
-    dataMC(acc['DYJetsToLL']['jets'], acc['DoubleMuon']['jets'], 'pT', '%s/jets_pT.png'%kinDir)
-    dataMC(acc['DYJetsToLL']['jets'], acc['DoubleMuon']['jets'], 'eta', '%s/jets_eta.png'%kinDir)
-    #dataMC(acc['DYJetsToLL']['jets'], acc['DoubleMuon']['jets'], 'phi', '%s/jets_phi.png'%kinDir)
-    dataMC(acc['DYJetsToLL']['jets'], acc['DoubleMuon']['jets'], 'nConstituents', '%s/jets_nConstituents.png'%kinDir)
-    dataMC(acc['DYJetsToLL']['nJets'], acc['DoubleMuon']['nJets'], 'nJets', '%s/jets_nJets.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'pT', '%s/jets_pT.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'eta', '%s/jets_eta.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'phi', '%s/jets_phi.png'%kinDir)
+    dataMC(mcHIST, dataHIST, 'nConstituents', '%s/jets_nConstituents.png'%kinDir)
+    
+    with open("%s/DYJetsToLL/event/eventHist.pickle"%name, 'rb') as f:
+        mcHIST = pickle.load(f)
+    with open("%s/DoubleMuon/event/eventHist.pickle"%name, 'rb') as f:
+        dataHIST = pickle.load(f)
+    dataMC(mcHIST, dataHIST, 'nJets', '%s/jets_nJets.png'%kinDir)
 
-def band(x, y, yerr, label, ax=None):
-    if ax is None:
-        ax = plt.gca()
-    line = ax.plot(x, y, 'o--', linewidth=1, markersize=2)
-    ax.fill_between(x, y-yerr, y+yerr, label=label, color=line[0].get_color(), alpha=0.7)
-    return line
-
-if doEECdataMC:
+def doEECdataMC():
     mkdir(EECdataMCdir, exist_ok=True)  
-    for pT in range(0, 5):
-        for N in range(2, 7):
+    for N in range(2, 7):
+        with open("%s/DYJetsToLL/EEC%d/EECHist.pickle"%(name,N), 'rb') as f:
+            mcHIST = pickle.load(f)
+        with open("%s/DoubleMuon/EEC%d/EECHist.pickle"%(name,N), 'rb') as f:
+            dataHIST = pickle.load(f)
+        for pT in range(0, 5):
             fig = plt.gcf()
             grid = fig.add_gridspec(2, 1, hspace=0, height_ratios=[3, 1])
 
@@ -152,8 +168,8 @@ if doEECdataMC:
             subplot_ax = fig.add_subplot(grid[1], sharex=main_ax)
             plt.setp(main_ax.get_xticklabels(), visible=False)
 
-            HMC = acc['DYJetsToLL']['EEC%d'%N].project('dR', 'pT')[::rebin(2),2*pT:2*(pT+1):sum]
-            HDATA = acc['DoubleMuon']['EEC%d'%N].project('dR', 'pT')[::rebin(2),2*pT:2*(pT+1):sum]
+            HMC = mcHIST.project('dR', 'pT')[::,2*pT:2*(pT+1):sum]
+            HDATA = dataHIST.project('dR', 'pT')[::,2*pT:2*(pT+1):sum]
             
             #print("values",HMC.values())
             #print("sum",HMC.sum().value)
@@ -191,43 +207,37 @@ if doEECdataMC:
             plt.savefig("%s/N%dpT%d.png"%(EECdataMCdir, N,pT), format='png', bbox_inches='tight')
             plt.clf()
 
-if doJetsFlavor:
-    H = acc['DYJetsToLL']['jets'].project('eta', 'flav')
-    midbins = H.axes[0].centers
-    binwidths = H.axes[0].widths
+def doJetsFlavor(): 
+    with open("%s/DYJetsToLL/jets/jetsHist.pickle"%(name), 'rb') as f:
+        mcHIST = pickle.load(f)
 
-    hist0 = H[:,0].values()/H[:,0].sum().value
-    err0 = np.sqrt(H[:,0].variances())/H[:,0].sum().value
-   
-    hist1 = H[:,1].values()/H[:,1].sum().value
-    err1 = np.sqrt(H[:,1].variances())/H[:,1].sum().value
+    HIST = mcHIST.project('eta', 'genFlav')
+    labels = ['Undefined truth flavor', 'Light quark', 'Gluon', 'Charm', 'Bottom']
+    dHist = HIST[:, ::sum]
+    for flav in range(0,5):
+        H = HIST[:, flav]
+        hist = H.values()/dHist.values()
+        print(H.sum().value/dHist.sum().value)
+        errs = 0 #np.sqrt(H.variances())/H.sum().value
+        midbins = H.axes[0].centers
+        edges = H.axes[0].edges
+        #binwidths = edges[1:] - edges[:-1]
+        band(midbins, hist, errs, labels[flav])
 
-    hist2 = H[:,2].values()/H[:,2].sum().value
-    err2 = np.sqrt(H[:,2].variances())/H[:,2].sum().value
-
-    hist3 = H[:,3].values()/H[:,3].sum().value
-    err3 = np.sqrt(H[:,3].variances())/H[:,3].sum().value
-
-    hist4 = H[:,4].values()/H[:,4].sum().value
-    err4 = np.sqrt(H[:,4].variances())/H[:,4].sum().value
-
-    band(midbins, hist0/binwidths, err0/binwidths, "undefined")
-    band(midbins, hist1/binwidths, err1/binwidths, "light quark")
-    band(midbins, hist2/binwidths, err2/binwidths, "gluon")
-    band(midbins, hist3/binwidths, err3/binwidths, "charm")
-    band(midbins, hist4/binwidths, err4/binwidths, "bottom")
-    plt.xlabel("$|\eta|$")
-    plt.ylabel("Density")
+    plt.xlabel("$\eta$")
+    plt.ylabel("Fraction")
     plt.legend()
     plt.savefig("%s/jetFlavor.png"%kinDir)
     plt.clf()
 
-if doEECflavor:
+def doEECflavor():
     mkdir(EECflavordir, exist_ok=True)  
-    for pT in range(0, 5):
-        for N in range(2, 7):
+    for N in range(2, 7):
+        with open("%s/DYJetsToLL/EEC%d/EECHist.pickle"%(name,N), 'rb') as f:
+            mcHIST = pickle.load(f)
+        for pT in range(0, 5):
             labels = ['Undefined truth flavor', 'Light quark', 'Gluon', 'Charm', 'Bottom']
-            HIST = acc['DYJetsToLL']['EEC%d'%N].project('dR', 'pT', 'flav')[::rebin(2), :, :]
+            HIST = mcHIST.project('dR', 'pT', 'genFlav')[:, :, :]
             for flav in range(1,5):
                 H = HIST[:, 2*pT:2*(pT+1):sum, flav]
                 hist = H.values()/H.sum().value
@@ -250,100 +260,46 @@ if doEECflavor:
             plt.savefig("%s/EEC%dpT%d_MC_flav.png"%(EECflavordir, N,pT), format='png')
             plt.clf()
 
-if doEECtag:
-    mkdir(EECtagdir, exist_ok=True)  
-    for pT in range(0, 5):
-        for N in range(2, 7):
-            #labels = ['Undefined truth flavor', 'Light quark', 'Gluon', 'Charm', 'Bottom']
-            HISTMC = acc['DYJetsToLL']['EEC%d'%N].project('dR', 'pT', 'tag')[::rebin(2), :, :]
-            HISTDATA = acc['DoubleMuon']['EEC%d'%N].project('dR', 'pT', 'tag')[::rebin(2), :, :]
+def doEECeta():
+    mkdir(EECetadir, exist_ok=True)  
+    for N in range(2, 7):
+        with open("%s/DYJetsToLL/EEC%d/EECHist.pickle"%(name,N), 'rb') as f:
+            mcHIST = pickle.load(f)
+        with open("%s/DoubleMuon/EEC%d/EECHist.pickle"%(name,N), 'rb') as f:
+            dataHIST = pickle.load(f)
 
-            #fail both tags
-            HMC = HISTMC[:, 2*pT:2*(pT+1):sum, 0]
-            histMC = HMC.values()/HMC.sum().value
-            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
-            midbins = HMC.axes[0].centers
-            edges = HMC.axes[0].edges
-            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            line = band(midbins, histMC/binwidths, errsMC/binwidths, "fail all")
+        for pT in range(0, 5):
+            labels = ['$%0.2f < |\eta| < %0.2f$'%(i, (i+1)) for i in range(3)]
+            HIST = mcHIST.project('dR', 'pT', 'eta')[:, :, ::rebin(3)]
+            HISTdata = dataHIST.project('dR', 'pT', 'eta')[:, :, ::rebin(3)]
 
-            HDATA = HISTDATA[:, 2*pT:2*(pT+1):sum, 0]
-            histDATA = HDATA.values()/HMC.sum().value * effective_lumi/LUMI
-            errsDATA = np.sqrt(HDATA.variances())/HMC.sum().value * effective_lumi/LUMI
-            midbins = HMC.axes[0].centers
-            edges = HMC.axes[0].edges
-            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label=None, color=line[0].get_color(), fmt='o', markersize=5)
-
-            #pass ctag
-            HMC = HISTMC[:, 2*pT:2*(pT+1):sum, (1,3)][:,::sum]
-            histMC = HMC.values()/HMC.sum().value
-            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
-            midbins = HMC.axes[0].centers
-            edges = HMC.axes[0].edges
-            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            line = band(midbins, histMC/binwidths, errsMC/binwidths, "pass c tag")
-
-            HDATA = HISTDATA[:, 2*pT:2*(pT+1):sum, (1,3)][:,::sum]
-            histDATA = HDATA.values()/HMC.sum().value * effective_lumi/LUMI
-            errsDATA = np.sqrt(HDATA.variances())/HMC.sum().value * effective_lumi/LUMI
-            midbins = HMC.axes[0].centers
-            edges = HMC.axes[0].edges
-            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label=None, color=line[0].get_color(), fmt='o', markersize=5)
-
-            #pass btag
-            HMC = HISTMC[:, 2*pT:2*(pT+1):sum, (2,3)][:,::sum]
-            histMC = HMC.values()/HMC.sum().value
-            errsMC = np.sqrt(HMC.variances())/HMC.sum().value
-            midbins = HMC.axes[0].centers
-            edges = HMC.axes[0].edges
-            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            line = band(midbins, histMC/binwidths, errsMC/binwidths, "pass b tag")
-
-            HDATA = HISTDATA[:, 2*pT:2*(pT+1):sum, (2,3)][:,::sum]
-            histDATA = HDATA.values()/HMC.sum().value * effective_lumi/LUMI
-            errsDATA = np.sqrt(HDATA.variances())/HMC.sum().value * effective_lumi/LUMI
-            midbins = HMC.axes[0].centers
-            edges = HMC.axes[0].edges
-            binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label=None, color=line[0].get_color(), fmt='o', markersize=5)
-
-            #HDATA = histDATA[:, 2*pT:2*(pT+1):sum, 0]
-            #histDATA = HDATA.values()/LUMI
-            #errsDATA = np.sqrt(HDATA.variances())/LUMI
-            #midbins = HDATA.axes[0].centers
-            #edges = HDATA.axes[0].edges
-            #binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-            #plt.errorbar(midbins, histDATA/binwidths, yerr=errsDATA/binwidths, label='Data', color='k', fmt='o')
-
-            plt.title("%d-point correlator\n$%d < p_T < %d$"%(N, 100*pT, 100*(pT+1)))
-            plt.legend()
-            plt.xlabel("$\Delta R$")
-            plt.ylabel("Projected correlator")
-            plt.axvline(0.4, c='k')
-            plt.xscale('log')
-            plt.yscale('log')
-            plt.xlim(left=1e-3)
-            plt.ylim(bottom=1e-2)
-            plt.text(0.35, 1.5e-2, "Jet clustering radius", fontsize=8, rotation=270, va='bottom', ha='right')
-            plt.savefig("%s/EEC%dpT%d_MC_tag.png"%(EECtagdir, N,pT), format='png')
-            plt.clf()
-
-if doEECrank:
-    mkdir(EECrankdir, exist_ok=True)  
-    for pT in range(0, 5):
-        for N in range(2, 7):
-            labels = ['Leading jet', 'subleading jet', 'sub-subleading jet']
-            HIST = acc['DYJetsToLL']['EEC%d'%N].project('dR', 'pT', 'pTrank')[::rebin(2), :, :]
-            for rank in range(0,3):
-                H = HIST[:, 2*pT:2*(pT+1):sum, rank]
+            for eta in range(3):
+                H = HIST[:, 2*pT:2*(pT+1):sum, eta]
                 hist = H.values()/H.sum().value
                 errs = np.sqrt(H.variances())/H.sum().value
                 midbins = H.axes[0].centers
                 edges = H.axes[0].edges
                 binwidths = np.log(edges[1:]) - np.log(edges[:-1])
-                band(midbins, hist/binwidths, errs/binwidths, labels[rank])
+                line = band(midbins, hist/binwidths, errs/binwidths, labels[eta])
+
+                H = HISTdata[:, 2*pT:2*(pT+1):sum, eta]
+                hist = H.values()/H.sum().value
+                errs = np.sqrt(H.variances())/H.sum().value
+                midbins = H.axes[0].centers
+                edges = H.axes[0].edges
+                binwidths = np.log(edges[1:]) - np.log(edges[:-1])
+                c = line[0].get_color()
+                rval = int("0x%s"%c[1:3], base=16)
+                gval = int("0x%s"%c[3:5], base=16)
+                bval = int("0x%s"%c[5:7], base=16)
+                hsv = matplotlib.colors.rgb_to_hsv([rval, gval, bval])
+                hsv[-1]/=1.2
+                rgb = matplotlib.colors.hsv_to_rgb(hsv)
+                rstr = "%02x"%int(rgb[0]+0.5)
+                gstr = "%02x"%int(rgb[1]+0.5)
+                bstr = "%02x"%int(rgb[2]+0.5)
+                c = "#%s%s%s"%(rstr, gstr, bstr)
+                plt.errorbar(midbins, hist/binwidths, yerr=errs/binwidths, label=None, color=c, fmt='o', markersize=5)
 
             plt.title("%d-point correlator\n$%d < p_T < %d$"%(N, 100*pT, 100*(pT+1)))
             plt.legend()
@@ -355,5 +311,38 @@ if doEECrank:
             plt.xlim(left=1e-3)
             plt.ylim(bottom=1e-2)
             plt.text(0.35, 1.5e-2, "Jet clustering radius", fontsize=8, rotation=270, va='bottom', ha='right')
-            plt.savefig("%s/EEC%dpT%d_MC_rank.png"%(EECrankdir, N,pT), format='png')
+            plt.savefig("%s/EEC%dpT%d_eta.png"%(EECetadir, N,pT), format='png')
             plt.clf()
+
+def doEfficiency():
+    mkdir(effDir, exist_ok=True)  
+
+    with open("%s/DYJetsToLL/jets/effHist.pickle"%name, 'rb') as f:
+        HIST = pickle.load(f)
+    
+    tagNames = {'cTag' : 'C tagging', 'bTag' : 'B tagging'}
+    genNames = ['light quark, gluon, & undefined-flavor', "charm", "bottom"]
+    for genFlav in [0, 1, 2]:
+        for tag in ['cTag', 'bTag']:
+            H = HIST[{'genFlav' : genFlav}].project("pT", "eta", tag)
+            tagged = H[{tag: 1}]
+            total = H[{tag: slice(None,None,sum)}]
+            efficiency = tagged/(total)
+            print(tag, genFlav)
+
+            plt.title("%s efficiency for generated %s jets"%(tagNames[tag], genNames[genFlav]))
+
+            efficiency.plot2d(cmap='Oranges', vmin=0, vmax=1)
+            plt.xlabel("$p_{T,Jet}$")
+            plt.ylabel("$|\eta_{Jet}|$")
+            plt.savefig("%s/%d_%s.png"%(effDir, genFlav, tag), format='png', bbox_inches='tight')
+            plt.clf()
+
+#doEfficiency()
+#doMu()
+#doZ()
+#doJets()
+#doEECdataMC()
+#doEECflavor()
+#doEECeta()
+doJetsFlavor()

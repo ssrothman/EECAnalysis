@@ -61,7 +61,44 @@ cset = wrap(
                 ) for i in range(len(Ms))],
             flow='error'
         )
+    ),
+    schema.Correction(
+        name = "A",
+        version = 2,
+        inputs = [
+            schema.Variable(name='Q', type='real'),
+            schema.Variable(name='pt', type='real'),
+            schema.Variable(name='eta', type='real'),
+            schema.Variable(name='phi', type='real'),
+        ],
+        output = schema.Variable(name = 'A', type='real'),
+        data=schema.MultiBinning(
+            nodetype='multibinning',
+            inputs=['eta', 'phi'],
+            edges=[dt['edges']['scales'][i].tolist() for i in range(2)],
+            content=As.tolist(),
+            flow='error'
+        )
+    ),
+    schema.Correction(
+        name = "M",
+        version = 2,
+        inputs = [
+            schema.Variable(name='Q', type='real'),
+            schema.Variable(name='pt', type='real'),
+            schema.Variable(name='eta', type='real'),
+            schema.Variable(name='phi', type='real'),
+        ],
+        output = schema.Variable(name = 'M', type='real'),
+        data=schema.MultiBinning(
+            nodetype='multibinning',
+            inputs=['eta', 'phi'],
+            edges=[dt['edges']['scales'][i].tolist() for i in range(2)],
+            content=Ms.tolist(),
+            flow='error'
+        )
     )
+
 )
 
 rochester_data = lookup_tools.txt_converters.convert_rochester_file(
@@ -70,14 +107,16 @@ rochester = lookup_tools.rochester_lookup.rochester_lookup(rochester_data)
 
 from time import time
 
-N = 100000
-N2 = 1000
+N = 1000
+N2 = 100000
 
 tUFUNC=0
 tCOFFEA=0
 tCORRECTIONLIB=0
+tCORRECTIONLIB2=0
 badmatches1 = 0
 badmatches2 = 0
+badmatches3 = 0
 for i in range(N2):
   charge = np.random.randint(0, 2, N)
   pt = np.random.random(N)*460+40
@@ -93,15 +132,26 @@ for i in range(N2):
   tCOFFEA += time()-t0
 
   charge = charge.astype(np.float64)
+
+  t0 = time()
+  A = cset['A'].evaluate(charge, pt, eta, phi)
+  M = cset['M'].evaluate(charge, pt, eta, phi)
+  w = 1.0/(M + charge * A * pt)
+  tCORRECTIONLIB2 += time()-t0
+
   t0 = time()
   z = cset['kScaleDT'].evaluate(charge, pt, eta, phi)
   tCORRECTIONLIB += time()-t0
 
+
   badmatches1 += np.sum(~np.isclose(y, z, atol = 1e-5))
   badmatches2 += np.sum(~np.isclose(y, x, atol = 1e-5))
+  badmatches3 += np.sum(~np.isclose(y, w, atol = 1e-5))
 
 print("coffea implementation took %0.3f seconds"%tCOFFEA)
 print("npy ufunc took %0.3f seconds"%tUFUNC)
 print("\tufunc disagreed with coffea %d times (%0.2f%%)"%(badmatches2, badmatches1/N/N2*100))
 print("correctionlib implementation took %0.3f seconds"%tCORRECTIONLIB)
 print("\tcorrectionlib disagreed with coffea %d times (%0.2f%%)"%(badmatches1, badmatches2/N/N2*100))
+print("correctionlib2 implementation took %0.3f seconds"%tCORRECTIONLIB2)
+print("\tcorrectionlib2 disagreed with coffea %d times (%0.2f%%)"%(badmatches3, badmatches3/N/N2*100))

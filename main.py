@@ -10,11 +10,18 @@ from processing.LumiProcessor import LumiProcessor
 
 from datetime import date
 
+'''
+Wants:
+Single muon dataset
+E^3 E correlators and such
+Maybe better EEC/jet linking?
+
+'''
+
 #read in json config
 configType = "PUPPI"
-filesetType = "test"
+filesetType = "test_v5"
 remote = False
-kind='all'
 
 configName = "config_%s.json"%configType
 fileSet = "fileset_%s.json"%filesetType
@@ -22,8 +29,8 @@ fileSet = "fileset_%s.json"%filesetType
 configName = "configs/%s"%configName
 fileSet = "filesets/%s"%fileSet
 
-outPrefix = "%s.%s.%s.%s"%(filesetType, date.today().strftime("%m-%d-%Y"), kind, configType)
-print(outPrefix)
+outname = "%s_%s_%s/"%(filesetType, date.today().strftime("%m-%d-%Y"), configType)
+print(outname)
 
 with open(configName, 'r') as f:
   args = json.load(f, object_hook = lambda x : SimpleNamespace(**x))
@@ -42,21 +49,22 @@ if remote:
 
   tic = time.time()
 
-  cluster = LPCCondorCluster(ship_env=False,
+  cluster = LPCCondorCluster(ship_env=True,
                             transfer_input_files=['processing', 'corrections'],
-                            memory='6GB',
+                            memory='4GB',
                             shared_temp_directory="/tmp")
-  cluster.adapt(minimum=1, maximum=100)
+  cluster.adapt(minimum=1, maximum=200)
   client = Client(cluster)
 
   exe_args = {
     "client" : client,
     "savemetrics" : True,
     "schema" : NanoAODSchema,
-    "align_clusters" : True
+    "align_clusters" : True,
+    "use_dataframes" : False
   }
 
-  proc = EECProcessor(args, kind)
+  proc = EECProcessor(args, outname)
   
   print("Waiting for at least one worker...")
   client.wait_for_workers(1)
@@ -66,7 +74,7 @@ if remote:
     processor_instance=proc,
     executor = processor.dask_executor,
     executor_args=exe_args,
-    chunksize=10000
+    chunksize=50000
     #maxchunks=10,
   )
 
@@ -76,17 +84,17 @@ if remote:
   print(f"Finished in {elapsed:.1f}s")
   print(f"Events/s: {metrics['entries'] / elapsed:.0f}")
   
-  with open("output/%s.hist.pickle"%outPrefix, 'wb') as f:
+  with open("output/%s.hist.pickle"%outname[:-1], 'wb') as f:
     pickle.dump(hists, f)
-  with open("output/%s.metrics.pickle"%outPrefix, 'wb') as f:
+  with open("output/%s.metrics.pickle"%outname[:-1], 'wb') as f:
     pickle.dump(metrics, f)
 
 else:
   runner = processor.Runner(
-    executor = processor.IterativeExecutor(compression=None, workers=6),
+    executor = processor.FuturesExecutor(workers=4),
     schema=NanoAODSchema,
     #maxchunks=4,
-    chunksize = 10000000
+    chunksize = 500000000
   )
 
   #hp = h.heap()
@@ -94,14 +102,41 @@ else:
   #print(hp.byrcs)
   #print()
 
-  out = runner(
+  hists = runner(
     fileSet,
     treename='Events',
-    processor_instance=EECProcessor(args, kind),
+    processor_instance=EECProcessor(args, outname),
   )
 
-  print(args.histname)
-  with open("output/%s.hist.pickle"%outPrefix, 'wb') as f:
-    pickle.dump(out, f)
+  print(hists)
 
-  print(out)
+  print(args.histname)
+  #with open("output/%s.hist.pickle"%outname, 'wb') as f:
+  #  pickle.dump(out, f)
+
+import hist 
+from datetime import datetime
+
+dRaxis = hist.axis.Regular(args.dRHist.nBins, 
+                            args.dRHist.min, 
+                            args.dRHist.max, 
+                            transform=getattr(hist.axis.transform, args.dRHist.transform))
+
+
+with open("summary.txt", 'w') as f:
+  f.write("EEC Processor run at ")
+  f.write(datetime.now().strftime("%m/%d/%Y %H:%M:%S"))
+  f.write('\n\n')
+
+  f.write("Total Weights:\n")
+  for dataset in hists.keys():
+    f.write("%s: %0.2f\n"%(dataset, hists[dataset]))
+  f.write('\n')
+
+  f.write("dR bin edges: \n")
+  for edge in dRaxis.edges:
+    f.write("%0.5e\n"%edge)
+
+xrdpath = "root://cmseos.fnal.gov//store/user/srothman/%s"%outname
+import subprocess
+subprocess.run(['xrdcopy','-f','summary.txt',xrdpath]) 

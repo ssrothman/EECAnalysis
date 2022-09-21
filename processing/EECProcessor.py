@@ -1,19 +1,16 @@
-from cmath import log
-from attr import dataclass
 import awkward as ak
 import numpy as np
-import json
-from types import SimpleNamespace
 from coffea.nanoevents.methods import vector, candidate
 import hist
-from vector import dim
-from .Histogram import Histogram
-from .roccor import kScaleDT, kSpreadMC#, kSmearMC
-
+from .roccor import kScaleDT, kSpreadMC, kSmearMC
+import os
 from coffea import processor
-from coffea.lookup_tools import extractor, evaluator
 
 import correctionlib
+
+import pandas as pd
+
+from .deltaR_matching import object_matching
 
 ak.behavior.update(candidate.behavior)
 ak.behavior.update(vector.behavior)
@@ -36,123 +33,31 @@ https://twiki.cern.ch/twiki/bin/view/CMS/TopTrigger
 https://twiki.cern.ch/twiki/bin/viewauth/CMS/MuonHLT2017
 '''
 
-def compute_dR(phiGen, phiReco, etaGen, etaReco):
-    '''
-    assume exactly two reco particles
-    '''
-    idxs = ak.argcartesian( (etaGen, etaReco), axis=1)
+MISSING = -999
 
-    genetas = etaGen[idxs[:,:,'0']]
-    recoetas = etaReco[idxs[:,:,'1']]
-    
-    genphis = phiGen[idxs[:,:,'0']]
-    recophis = phiReco[idxs[:,:,'1']]
+def cast(x):
+    z = ak.to_numpy(ak.flatten(ak.fill_none(x, MISSING), axis=None))
+    if z.dtype == np.float64:
+        return z.astype(np.float32)
+    elif z.dtype == np.int64:
+        return z.astype(np.int32)
+    else:
+        return z
 
-    dphis = np.abs(genphis-recophis)
-    gt = dphis>np.pi
-    dphis = gt * (2*np.pi - dphis) + (1-gt)*(dphis)
-    
-    detas = np.abs(genetas-recoetas)
+def save_dfs_parquet(fname, dfs_dict):
+    xrdpath = "root://cmseos.fnal.gov//store/user/srothman/%s"%fname
+    dfs_dict.to_parquet(xrdpath)
 
-    dRs = np.sqrt(dphis*dphis + detas*detas)
-
-    mu1 = idxs[:,:,'1'] == 0
-    mu2 = idxs[:,:,'1'] == 1
-
-    dRmu1 = dRs[mu1]
-    dRmu2 = dRs[mu2]
-
-    match1 = ak.argmin(dRmu1, axis=1, keepdims=True)
-    match2 = ak.argmin(dRmu2, axis=1, keepdims=True)
-    
-    genId1 = idxs[mu1][match1][:,:,'0']
-    genId2 = idxs[mu2][match2][:,:,'0']
-
-    dRmu1 = dRmu1[match1]
-    dRmu2 = dRmu2[match2]
-
-    genId = ak.concatenate( (genId1, genId2), axis=-1)
-    dR = ak.concatenate( (dRmu1, dRmu2), -1)
-
-    return dR, genId
+def ak_to_pd(data):
+    return pd.DataFrame.from_dict(data)
 
 class EECProcessor(processor.ProcessorABC):
-    def __init__(self, args, kind):
+    def __init__(self, args, outname):
         self.args = args
-
-        self.kind = kind
 
         self.cset = correctionlib.CorrectionSet.from_file("corrections/muon_Z.json")
     
-    def buildHists(self, output, dataset, isMC, kind):
-        if kind=='kin' or kind=='all':
-            output[dataset]["nJets"] = hist.Hist(
-                hist.axis.Regular(10, 0, 10, name="nJets", label="nJets"),
-                storage=hist.storage.Weight()
-            )
-
-            jetsAxes = [ 
-                    hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,Jet}$'),
-                    hist.axis.Regular(50, -3, 3, name='eta', label='$\eta_{Jet}$'),
-                    hist.axis.Regular(10, -np.pi, np.pi, name='phi', label='$\phi_{Jet}$', circular=True),
-                    hist.axis.Integer(0, 2, name='pTrank', label='pTrank'),
-                    hist.axis.IntCategory([0, 1], name='bTag', label='Bottom tag'),
-                    hist.axis.IntCategory([0, 1], name='cTag', label='Charm tag'),
-                    hist.axis.Regular(25, 0, 50, name='nConstituents', label='$N_{Constituents}$')
-            ]
-            if isMC:
-                jetsAxes += [
-                    hist.axis.IntCategory([0, 1, 2, 3, 4], name='flav', label='Flavor')
-                ]
-
-            output[dataset]["jets"] = hist.Hist(
-                *jetsAxes,
-                storage=hist.storage.Weight()
-            )
-
-            output[dataset]['dimuon'] = hist.Hist(
-                hist.axis.Regular(50, self.args.Zsel.minMass, self.args.Zsel.maxMass, name='mass', label='$m_{\mu\mu}$'),
-                hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,\mu\mu}$'),
-                hist.axis.Regular(50, -3, 3, name='y', label='$y{\mu\mu}$'),
-                hist.axis.Regular(10,-np.pi,np.pi,name='phi', label='$\phi_{\mu\mu}$', circular=True),
-                storage=hist.storage.Weight()
-            )
-            output[dataset]['muon'] = hist.Hist(
-                hist.axis.Regular(50, 0, 500, name='pT', label='$p_{T,\mu}$'),
-                hist.axis.Regular(50, -3, 3, name='eta', label='$\eta_{\mu}$'),
-                hist.axis.Regular(10,-np.pi,np.pi,name='phi', label='$\phi_{\mu}$', circular=True),
-                storage=hist.storage.Weight()
-            )
-
-        if kind.startswith("EEC") or kind == 'all':
-            EECAxes = [
-                hist.axis.Regular(50, 1e-5, 1.0, name='dR', label='$\Delta R$', transform=hist.axis.transform.log),
-                hist.axis.Regular(10, 0, 500, name='pT', label='$p_{T,Jet}$'),
-                hist.axis.Regular(10, 0, 3, name='eta', label='$\eta_{Jet}$'),
-                hist.axis.IntCategory([0, 1], name='bTag', label='Bottom tag'),
-                hist.axis.IntCategory([0, 1], name='cTag', label='Charm tag'),
-                hist.axis.Integer(0, 2, name='pTrank', label='pTrank'),
-            ]
-            if isMC:
-                EECAxes += [
-                    hist.axis.IntCategory([0,1,2,3,4], name='flav', label='Flavor'),
-                ]
-            
-            if kind == 'all':
-                for N in range(2,7):
-                    output[dataset]['EEC%d'%N] = hist.Hist(
-                        *EECAxes,
-                        storage=hist.storage.Weight()
-                    )
-            else:
-                N = int(kind[-1])
-
-                output[dataset]['EEC%d'%N] = hist.Hist(
-                    *EECAxes,
-                    storage=hist.storage.Weight()
-                )
-
-        return output
+        self._output_location = outname
 
     def computeMask(self, data):
         #event cuts...
@@ -175,9 +80,7 @@ class EECProcessor(processor.ProcessorABC):
         evtMask = np.logical_and(evtMask,
             ak.all(muons[self.args.muCuts.id]==1, axis=-1))
         
-        #all muons pass min pT, max eta
-        #evtMask = np.logical_and(evtMask,
-        #    ak.all(muons.pt > self.args.muCuts.minPt, axis=-1))
+        #all muons pass max eta (min pT to be applied after rochester corrections)
         evtMask = np.logical_and(evtMask,
             ak.all(np.abs(muons.eta) < self.args.muCuts.maxEta, axis=-1))
 
@@ -188,9 +91,19 @@ class EECProcessor(processor.ProcessorABC):
         evtMask = np.logical_and(evtMask, Zs.charge==0)
 
         evtMask = ak.fill_none(evtMask, False)
+
         return evtMask
 
     def process(self, data):
+        #print(data.metadata)
+        #for key in data.metadata.keys():
+        #    print(key, data.metadata[key])
+        #if data.metadata['fileuuid'] == 'bb2a9618-f406-11ec-ad3c-0d2d12acbeef':
+        #    print(data.metadata['filename'])
+        #    print(data.metadata['filename'][-10:])
+        #    print()
+        #    print()
+        #return {}
         dataset = data.metadata['dataset']
         output = {}
         output [dataset] = {}
@@ -198,53 +111,44 @@ class EECProcessor(processor.ProcessorABC):
         isMC = hasattr(data, "genWeight")
 
         if isMC:
-            output[dataset]['sumw'] = ak.sum(data.genWeight)
+           sumw = ak.sum(data.genWeight)
         else:
-            output[dataset]['sumw'] = len(data)
+            sumw = len(data)
+
+        #return {dataset: sumw}
 
         evtMask = self.computeMask(data)
         data = data[evtMask]
-
+        
         #muons
         muons = data[self.args.muons]
         
-        #print('\n\n')
-        #print("EVENT 5362")
-
         #rochester corrections
         if not isMC:
             rcSF = kScaleDT(muons.charge, muons.pt, muons.eta, muons.phi, 0, 0)
         else:
             genParts = data[self.args.genParts]
             genMuons = genParts[np.abs(genParts.pdgId)==13]
-            
-            dR, genId = compute_dR(genMuons.phi, muons.phi, genMuons.eta, muons.eta)
-            match = genMuons[genId]
-            matchPt = ak.where(ak.is_none(match.pt), match.pt, muons.pt)
 
-            #print("SF args")
-            #print("genMuons", genMuons[5362])
-            #print("mu1", muons[5362,0].charge,muons[5362,0].pt,muons[5362,0].eta,muons[5362,0].phi,matchPt[5362,0])
-            #print("mu2", muons[5362,1].charge,muons[5362,1].pt,muons[5362,1].eta,muons[5362,1].phi,matchPt[5362,1])
-            rcSF = kSpreadMC(muons.charge, muons.pt, muons.eta, muons.phi, matchPt, 0, 0)
-            #print("SF:",rcSF[5362])
-
-        #print("pre SF")
-        #print("mu1", muons[5362,0].pt,muons[5362,0].eta,muons[5362,0].phi)
-        #print("mu2", muons[5362,1].pt,muons[5362,1].eta,muons[5362,1].phi)
-        #print("post SF")
+            matchGen, matchReco, dR = object_matching(genMuons, muons, self.args.muMatchingCone)            
+            matchedSF = kSpreadMC(matchReco.charge, matchReco.pt, matchReco.eta, matchReco.phi, matchGen.pt, 0, 0)
+        
+            nmu = ak.sum(ak.num(dR))
+            u = ak.unflatten(np.random.random(nmu).astype(dtype=np.float32), ak.num(dR))
+            unmatchedSF = kSmearMC(muons.charge, muons.pt, muons.eta, muons.phi, muons.nTrackerLayers, u, 0, 0)
+        
+            rcSF = ak.where(ak.is_none(dR, axis=-1), unmatchedSF, matchedSF)
+        
         muons['pt'] = muons.pt*rcSF
-        #print("mu1", muons[5362,0].pt,muons[5362,0].eta,muons[5362,0].phi)
-        #print("mu2", muons[5362,1].pt,muons[5362,1].eta,muons[5362,1].phi)
-        #print('\n\n')
 
-        #redo muon pt cut
+        #muon pt cut
         mask = ak.all(muons.pt > self.args.muCuts.minPt, axis=-1)
         data = data[mask]
         muons = muons[mask]
 
         mu1 = muons[:,0]
         mu2 = muons[:,1]
+
 
         #Z bosons
         Z = muons[:,0] + muons[:,1]
@@ -287,33 +191,20 @@ class EECProcessor(processor.ProcessorABC):
 
         #apply max eta
         goodjets = np.logical_and(goodjets, np.abs(jets.eta) < self.args.maxJetEta)
-        '''
-        Btagging WPs 2017UL
-            Loose: 0.0532
-            Medium: 0.304
-            Tight: 0.7476
+        
+        #apply mask
+        jets = jets[goodjets]
 
-        CTagging WPs 2017UL
-        CvsL
-            Loose: 0.03
-            Medium: 0.085
-            Tight: 0.52
-        CvsB
-            Loose: 0.4
-            Medium: 0.34
-            Tight: 0.05
-        '''
+        jetFeats = {key: jets[key] for key in jets.fields}
+        jetFeats['bTag'] = jets.btagDeepFlavB > self.args.tag.bWP
 
-        jets.bTag = jets.btagDeepFlavB > self.args.tag.bWP
-
-        #TODO: check tag definition
         CvsL = jets.pfDeepFlavourJetTags_probc/(jets.pfDeepFlavourJetTags_probc + jets.pfDeepFlavourJetTags_probuds + jets.pfDeepFlavourJetTags_probg)
         CvsB = jets.pfDeepFlavourJetTags_probc/(jets.pfDeepFlavourJetTags_probc + jets.pfDeepFlavourJetTags_probb + jets.pfDeepFlavourJetTags_probbb + jets.pfDeepFlavourJetTags_problepb)
-        jets.cTag = np.logical_and(CvsL > self.args.tag.CvsLWP, CvsB > self.args.tag.CvsBWP)
+        jetFeats['cTag'] = np.logical_and(CvsL > self.args.tag.CvsLWP, CvsB > self.args.tag.CvsBWP)
 
         #jet pT rank
-        jets.pTrank = ak.local_index(jets, axis=-1)
-
+        jetFeats['pTrank'] = ak.local_index(jets, axis=-1)
+        
         #genJets
         if isMC:
             #compute gen flavor
@@ -327,9 +218,11 @@ class EECProcessor(processor.ProcessorABC):
             NAJet = np.logical_and(hadFlav==0, partFlav==0)
 
             #categories should all be mutually exclusive, so we can just go one by one 
-            jets.genFlav = NAJet*0 + lJet*1 + gJet*2 + cJet*3 + bJet*4
+            jetFeats['genFlav'] = NAJet*0 + lJet*1 + gJet*2 + cJet*3 + bJet*4
+            
+            jets = ak.zip(jetFeats)
 
-            genJets = data[self.args.jets]
+            genJets = data[self.args.genJets]
             genJet4vec = ak.zip({
                 "pt" : genJets.pt,
                 'eta' : genJets.eta,
@@ -339,10 +232,79 @@ class EECProcessor(processor.ProcessorABC):
                 behavior=vector.behavior,
                 with_name='PtEtaPhiMLorentzVector'
             )
+
+            #veto gen jets too close to the muons
             goodgenjets = np.logical_and(
                 genJet4vec.delta_r(mu1)>self.args.jetSize, 
                 genJet4vec.delta_r(mu2)>self.args.jetSize)
+            
+            #apply min pT
+            goodgenjets = np.logical_and(goodgenjets, genJets.pt > self.args.minGenJetPt)
+            
+            #apply max eta
+            goodgenjets = np.logical_and(goodgenjets, np.abs(genJets.eta) < self.args.maxGenJetEta)
+
+            genJets = genJets[goodgenjets]
+            
+            genJetFeats = {key:genJets[key] for key in genJets.fields}
+
+            #gen matching
+            #*Idx is None indicates failed match
+            _, _, _, jets.genIdx, _ = object_matching(genJets, jets, self.args.jetMatchingCone, return_indices=True)
+            
+            matchedRecoJets, matchedGenJets, _, genJetFeats['recoIdx'], _ = object_matching(jets, genJets, self.args.jetMatchingCone, return_indices=True)
+
+            genJetFeats['genFlav'] = matchedRecoJets.genFlav
+            genJetFeats['cTag'] = matchedRecoJets.cTag
+            genJetFeats['bTag'] = matchedRecoJets.bTag
+            genJetFeats['pTrank'] = ak.local_index(genJets, axis=-1)
+
+            genJets = ak.zip(genJetFeats)
+        else:
+            jets = ak.zip(jetFeats)
+
+        #reshape EECs and apply goodjets mask
+        EECnames = []
+        for i in range(2, 7): #projected
+            EECnames.append("EEC%d"%i)
         
+        for ps in [12, 13, 22]:
+            EECnames.append("EECnonIRC%d"%ps)
+        
+        for i in [3,4]:
+            EECnames.append("Full%dPtEEC"%i)
+        
+        for name in EECnames:
+            EEC = data[name]
+            idxs = ak.materialized(EEC.jetIdx)
+            runs = ak.run_lengths(idxs)
+            data[name] = ak.unflatten(EEC, ak.flatten(runs), axis=-1)
+            data[name] = data[name][goodjets]
+            #print()
+            #print("Reshaped", name)
+            if hasattr(data[name], 'jetPT'):
+                assert ak.all(data[name].jetPT == jets.pt)
+            #    print("correct?", ak.all(data[name].jetPT == jets.pt))
+            #else:
+            #    print("no jetPT attr, assuming correctness for now")
+            #print()
+
+        if isMC:
+            for name in EECnames:
+                name = 'gen%s'%name
+                EEC = data[name]
+                idxs = ak.materialized(EEC.jetIdx)
+                runs = ak.run_lengths(idxs)
+                data[name] = ak.unflatten(EEC, ak.flatten(runs), axis=-1)
+                data[name] = data[name][goodgenjets]
+                #print()
+                #print("Reshaped", name)
+                #if hasattr(data[name], 'jetPT'):
+                #    print("correct?", ak.all(data[name].jetPT == genJets.pt))
+                #else:
+                #    print("no jetPT attr, assuming correctness for now")
+                #print()
+
         #scale factors
         if isMC:
             evtwt = data.genWeight
@@ -361,125 +323,138 @@ class EECProcessor(processor.ProcessorABC):
         else:
             evtwt = ak.ones_like(ak.num(jets,axis=-1))
         
+        jetwt = ak.broadcast_arrays(evtwt, jets.pt)[0]
+        muwt = ak.broadcast_arrays(evtwt, mu1.pt)[0]
+        dimuonwt = ak.broadcast_arrays(evtwt, Z.pt)[0]
 
-        output = self.buildHists(output, dataset, isMC, self.kind)
+        variables = {
+            'event' : {
+                'nJets' : cast(ak.sum(goodjets, axis=-1)),
+                'weight' : cast(evtwt)
+            },
+            'jets' : {
+                'pT' : cast(jets.pt),
+                'eta': cast(jets.eta),
+                'phi': cast(jets.phi),
+                'bTag': cast(jets.bTag),
+                'cTag': cast(jets.cTag),
+                'nConstituents': cast(jets.nConstituents),
+                'pTrank': cast(jets.pTrank),
+                'weight' : cast(jetwt),
+            },
+            'dimuon' : {
+                'pT' : cast(Z.pt),
+                'y' : cast(Z.rapid),
+                'phi' : cast(Z.phi),
+                'mass' : cast(Z.mass),
+                'weight' : cast(dimuonwt)
+            },
+            'muon' : {
+                'pT' : cast(ak.concatenate((mu1.pt, mu2.pt), axis=0)),
+                'eta' : cast(ak.concatenate((mu1.eta, mu2.eta), axis=0)),
+                'phi' : cast(ak.concatenate((mu1.phi, mu2.phi), axis=0)),
+                'weight' : cast(ak.concatenate((muwt, muwt), axis=0)),
+            }
+        }
 
-        if self.kind == 'kin' or self.kind=='all':
-            output[dataset]['nJets'].fill(
-                nJets = ak.flatten(ak.num(jets[goodjets], axis=-1), axis=None),
-                weight=ak.flatten(evtwt,axis=None)
-            )
+        if isMC:
+            genjetwt = ak.broadcast_arrays(evtwt, genJets.pt)[0]
 
-            castedweight = ak.broadcast_arrays(evtwt, jets.pt)[0]
-            if isMC:
-                output[dataset]['jets'].fill(
-                    pT = ak.flatten(jets.pt[goodjets], axis=None),
-                    eta = ak.flatten(jets.eta[goodjets], axis=None),
-                    phi = ak.flatten(jets.phi[goodjets], axis=None),
-                    weight=ak.flatten(castedweight[goodjets], axis=None),
-                    flav = ak.flatten(jets.genFlav[goodjets]),
-                    bTag = ak.flatten(jets.bTag[goodjets]),
-                    cTag = ak.flatten(jets.cTag[goodjets]),
-                    nConstituents = ak.flatten(jets.nConstituents[goodjets], axis=None),
-                    pTrank = ak.flatten(jets.pTrank[goodjets])
-                )
-            else:
-                output[dataset]['jets'].fill(
-                    pT = ak.flatten(jets.pt[goodjets], axis=None),
-                    eta = ak.flatten(jets.eta[goodjets], axis=None),
-                    phi = ak.flatten(jets.phi[goodjets], axis=None),
-                    weight=ak.flatten(castedweight[goodjets], axis=None),
-                    bTag = ak.flatten(jets.bTag[goodjets], axis=None),
-                    cTag = ak.flatten(jets.cTag[goodjets], axis=None),
-                    nConstituents = ak.flatten(jets.nConstituents[goodjets], axis=None),
-                    pTrank = ak.flatten(jets.pTrank[goodjets])
-                )
+            variables['jets']['genFlav'] = cast(jets.genFlav)
             
-            castedweight = ak.broadcast_arrays(evtwt, Z.pt)[0]
-            output[dataset]['dimuon'].fill(
-                mass = Z.mass,
-                pT = Z.pt,
-                y = Z.rapid,
-                phi = Z.phi,
-                weight=castedweight
-            )
+            #genJets variables
+            matchedGenJets = genJets[jets.genIdx]
 
-            castedweight = ak.broadcast_arrays(evtwt, mu1.pt)[0]
-            output[dataset]['muon'].fill(
-                pT = mu1.pt,
-                eta = mu1.eta,
-                phi = mu1.phi,
-                weight= castedweight
-            )
+            variables['jets']['genPT'] = cast(matchedGenJets.pt)
+            variables['jets']['genEta'] = cast(matchedGenJets.eta)
+            variables['jets']['genPhi'] = cast(matchedGenJets.phi)
 
-            castedweight = ak.broadcast_arrays(evtwt, mu2.pt)[0]
-            output[dataset]['muon'].fill(
-                pT = mu2.pt,
-                eta = mu2.eta,
-                phi = mu2.phi,
-                weight = castedweight
-            )
-        if self.kind.startswith("EEC"):
-            i = int(self.kind[-1])
-            name = "EEC%d"%i
+            #need to also account for genJets which don't get reconstructed
+            missingMask = ak.is_none(genJets.recoIdx, axis=-1)
+
+            nMissing = ak.sum(missingMask)
+            missingInt = cast(MISSING*np.ones(nMissing, dtype=np.int32))
+            missingFloat = cast(MISSING*np.ones(nMissing, dtype=np.float32))
+
+            recoFloats = ['pT', 'eta', 'phi', 'bTag', 'cTag']
+            recoInts = ['nConstituents', 'genFlav', 'pTrank']
+            
+            for var in recoFloats:
+                variables['jets'][var] = np.concatenate((variables['jets'][var], missingFloat), axis=0)
+            
+            for var in recoInts:
+                variables['jets'][var] = np.concatenate((variables['jets'][var], missingInt), axis=0)
+            
+            variables['jets']['genPT'] = np.concatenate((variables['jets']['genPT'], 
+                                                         cast(genJets.pt[missingMask])), axis=0)
+            variables['jets']['genEta'] = np.concatenate((variables['jets']['genEta'], 
+                                                         cast(genJets.eta[missingMask])), axis=0)
+            variables['jets']['genPhi'] = np.concatenate((variables['jets']['genPhi'], 
+                                                         cast(genJets.phi[missingMask])), axis=0)
+            variables['jets']['weight'] = np.concatenate((variables['jets']['weight'], 
+                                                         cast(genjetwt[missingMask])), axis=0)
+
+        dRaxis = hist.axis.Regular(self.args.dRHist.nBins, 
+                                   self.args.dRHist.min, 
+                                   self.args.dRHist.max, 
+                                   transform=getattr(hist.axis.transform, self.args.dRHist.transform))
+        centers = dRaxis.centers
+        edges = dRaxis.edges
+
+        for name in EECnames:
+            if "Full" in name:
+                continue
             EEC = data[name]
-            self.fillProjectedEEC(output[dataset][name], 
-                              EEC,
-                              jets,
-                              goodjets,
-                              evtwt,
-                              doFlav=isMC,
-                              doTag = True,
-                              doRank = True)
-        if self.kind=='all':
-            for i in range(2,7):
-                name = "EEC%d"%i
-                EEC = data[name]
-                self.fillProjectedEEC(output[dataset][name], 
-                                EEC,
-                                jets,
-                                goodjets,
-                                evtwt,
-                                doFlav=isMC,
-                                doTag = True,
-                                doRank = True)
 
-        return output
+            if isMC:
+                matchedEEC = data['gen%s'%name][jets.genIdx]
+                genEEC = data['gen%s'%name][missingMask]
+
+            for j in range(len(centers)):
+                left = edges[j]
+                right = edges[j+1]
+                mask = np.logical_and(left < EEC.dRs, EEC.dRs <= right)
+                wts = ak.sum(EEC.wts[mask], axis=-1)
+                variables['jets']['%swt%d'%(name,j)] = cast(wts)
+
+                if isMC:
+                    mask = np.logical_and(left < matchedEEC.dRs, matchedEEC.dRs <= right)
+                    wts = ak.sum(matchedEEC.wts[mask], axis=-1)
+                    variables['jets']['gen%swt%d'%(name,j)] = cast(wts)
+
+                    #account for unmatched genJets
+                    variables['jets']['%swt%d'%(name,j)] = np.concatenate((
+                        variables['jets']['%swt%d'%(name,j)], missingFloat
+                    ), axis=0)
+
+                    mask = np.logical_and(left < genEEC.dRs, genEEC.dRs <= right)
+                    wts = ak.sum(genEEC.wts[mask], axis=-1)
+                    variables['jets']['gen%swt%d'%(name,j)] = np.concatenate((
+                        variables['jets']['gen%swt%d'%(name,j)], cast(wts)
+                    ), axis=0)
+
+            #if isMC:
+            #    name = 'genEEC%d'%i
+            #    genEEC = data[name]
+                #variables = addEECvars(variables, name, genEEC, genJets, goodgenjets, evtwt, doFlav=False, doTag=False, doRank=False)
+
+        output = {}
+        for key in variables.keys():
+            output[key] = ak_to_pd(variables[key])
+
+        fname = data.behavior["__events_factory__"]._partition_key.replace("/", "-")
+        fname= "condor_" + fname
+
+        for key in output.keys():
+            outpath = self._output_location + dataset + "/" + key
+            pqpath = outpath + "/parquet"
+            if not os.path.exists(outpath):
+                os.makedirs(outpath, exist_ok=True)
+            if not os.path.exists(pqpath):
+                os.makedirs(pqpath, exist_ok=True)
+            save_dfs_parquet(pqpath + "/" + fname + '.parquet', output[key])
+
+        return {dataset: sumw}
 
     def postprocess(self, accumulator):
         return accumulator
-    
-    def fillProjectedEEC(self, hist, EEC, jets, goodJets, evtWt, doFlav, doTag, doRank):
-        dRs = EEC.dRs
-        wts = EEC.wts
-        jetIdx = EEC.jetIdx
-
-        goodJets = ak.pad_none(goodJets, ak.max(jetIdx, axis=None)+1, clip=True, axis=-1)
-        goodJets = ak.fill_none(goodJets, False)
-        goodEEC = goodJets[jetIdx]
-
-        dRs = dRs[goodEEC]
-        wts = wts[goodEEC]
-        jetIdx = jetIdx[goodEEC]
-
-        jetPt = jets.pt[jetIdx]
-        jetEta = jets.eta[jetIdx]
-
-        fillvars = {
-            "dR" : ak.flatten(dRs, axis=None),
-            "weight" : ak.flatten(wts*evtWt, axis=None),
-            "pT" : ak.flatten(jetPt, axis=None),
-            "eta" : ak.flatten(jetEta, axis=None)
-        }
-
-        if doFlav:
-            fillvars["flav"] = ak.flatten(jets.genFlav[jetIdx], axis=None)
-        
-        if doTag:
-            fillvars["bTag"] = ak.flatten(jets.bTag[jetIdx], axis=None)
-            fillvars["cTag"] = ak.flatten(jets.cTag[jetIdx], axis=None)
-
-        if doRank:
-            fillvars["pTrank"] = ak.flatten(jets.pTrank[jetIdx], axis=None)
-
-        hist.fill(**fillvars)
