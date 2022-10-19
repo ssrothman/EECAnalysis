@@ -1,0 +1,59 @@
+{
+  "triggers":["IsoMu27"],
+  "muons" : "Muon",
+  "jets" : "selectedPatJetsAK4PFCHS",
+  "parts" : "PFCands",
+  "PU" : "CHS",
+  
+  "genParts" : "GenPart",
+  "genJets" : "ak4GenJetsNoNu",
+
+  "evtCuts" : [
+    {
+      "var" : "nMuon",
+      "minval" : 2,
+      "maxval" : 2
+    }
+  ],
+
+  "muCuts":{
+    "isoName" : "pfRelIso04_all",
+    "maxIso" : 0.15,
+    "id" : "tightId",
+    "minPt" : 29,
+    "maxEta" : 2.4
+  },
+
+  "muMatchingCone" : 0.05,
+
+  "Zsel":{
+    "minMass":60,
+    "maxMass":120
+  },
+
+  "jetSize":0.4,
+  "jetArbitration" :"all",
+  "minJetPt":30,
+  "maxJetEta":2.4,
+
+  "minGenJetPt" : 20,
+  "maxGenJetEta" : 2.7,
+
+  "jetMatchingCone" : 0.1,
+  
+  "tag":{
+    "bWP" : 0.7476,
+    "CvsLWP" : 0.52,
+    "CvsBWP" : 0.05
+  },
+
+  "histname" : "output/hists_test.pickle",
+  "metricname" : "output/metrics_test.pickle",
+
+  "dRHist":{
+    "nBins" : 50,
+    "min" : 1e-4,
+    "max" : 1,
+    "transform" : "log"
+  }
+}

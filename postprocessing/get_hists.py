@@ -10,18 +10,30 @@ import awkward as ak
 import os
 import fsspec_xrootd
 
-folder = 'test_v5_09-21-2022_PUPPI'
-basepath = '/store/user/srothman/%s'%folder
-histpath = '%s/hists'%basepath
+#TODO: handle missing values from matching
+#TODO: read everything in
 
 fs = fsspec_xrootd.XRootDFileSystem(hostid="cmseos.fnal.gov")
 
-def read_summary():
+def check_exists(writepath, overwrite):
+    if fs.exists(writepath):
+        print("\tTarget file already exists at:", writepath)
+        if overwrite:
+            print("\t\tOverwriting...")
+            return None
+        else:
+            print("\tUsing pre-existing histogram...")
+            with fsspec_xrootd.XRootDFile(fs=fs, path=writepath, mode='rb') as f:
+                return pickle.load(f)
+
+def read_summary(folder):
     '''
     Read dR bin edges from summary.txt
     '''
     edges = []
     sumws = {}
+
+    basepath = '/store/user/srothman/%s'%folder
 
     with fsspec_xrootd.XRootDFile(fs=fs, path="%s/summary.txt"%basepath, mode='rb') as f:
         startedDRs = False
@@ -35,7 +47,7 @@ def read_summary():
 
             if startedWTs:
                 splitted = text.split()
-                sumws[splitted[0]] = float(splitted[1])
+                sumws[splitted[0][:-1]] = float(splitted[1])
             elif 'Total Weights' in text:
                 startedWTs = True
 
@@ -46,29 +58,207 @@ def read_summary():
 
     return edges, sumws
 
-edges, sumws = read_summary()
+def get_muons(folder, overwrite=False):
+    basepath = '/store/user/srothman/%s'%folder
+    writepath = "%s/%shist.pickle"%(basepath, "muon")
 
-def get_EEC(name, edges, overwrite=False):
+    check = check_exists(writepath, overwrite)
+    if check is not None:
+        return check
+
+    dataPath = "%s/SingleMuon/muon/parquet"%basepath
+    mcPath = "%s/DYJetsToLL/muon/parquet"%basepath
+
+    columns = ['pT', 'eta', 'weight', 'phi']
+
+    dataSET = ds.dataset(dataPath, format='parquet', filesystem=fs)
+    mcSET = ds.dataset(mcPath, format='parquet', filesystem=fs)
+
+    HIST = hist.Hist(
+        hist.axis.Regular(50, 20, 100, 
+                            name='pT', label='$p_{T,\mu}$'),
+        hist.axis.Regular(50, 0, 3, 
+                            name='eta', label='|$\eta_{\mu}$|'),
+         hist.axis.Regular(50, -np.pi, np.pi, 
+                            name='phi', label='$\phi_{\mu}$'),                   
+        hist.axis.StrCategory(['MC', 'Data'], name='label', label='label'),
+        storage=hist.storage.Weight()
+    )
+
+    print("\tFilling hist from data...")
+    for batch in tqdm(dataSET.to_batches(columns = columns)):
+        df = batch.to_pandas()
+        
+        HIST.fill(
+            pT = df.pT,
+            eta = np.abs(df.eta),
+            phi = df.phi,
+            weight = df['weight'],
+            label='Data'
+        )
+    
+    print("\tFilling hist from mc...")
+    for batch in tqdm(mcSET.to_batches(columns = columns)):
+        df = batch.to_pandas()
+        
+        HIST.fill(
+            pT = df.pT,
+            eta = np.abs(df.eta),
+            phi = df.phi,
+            weight = df['weight'],
+            label='MC'
+        )
+    
+    with fsspec_xrootd.XRootDFile(fs=fs, path=writepath, mode='wb') as f:
+        pickle.dump(HIST, f)
+
+    print("\tDone.")
+    print()
+
+    return HIST
+
+def get_Zs(folder, overwrite=False):
+    basepath = '/store/user/srothman/%s'%folder
+    writepath = "%s/%shist.pickle"%(basepath, "Z")
+
+    check = check_exists(writepath, overwrite)
+    if check is not None:
+        return check
+
+    dataPath = "%s/SingleMuon/dimuon/parquet"%basepath
+    mcPath = "%s/DYJetsToLL/dimuon/parquet"%basepath
+
+    columns = ['pT', 'y', 'phi', 'mass', 'weight']
+
+    dataSET = ds.dataset(dataPath, format='parquet', filesystem=fs)
+    mcSET = ds.dataset(mcPath, format='parquet', filesystem=fs)
+
+    HIST = hist.Hist(
+        hist.axis.Regular(50, 0, 100, 
+                            name='pT', label='$p_{T,Z}$'),
+        hist.axis.Regular(50, 0, 3, 
+                            name='y', label='|$y_{Z}$|'),
+        hist.axis.Regular(50, -np.pi, np.pi, 
+                            name='phi', label='$\phi_{Z}$'),  
+        hist.axis.Regular(50, 80, 100, 
+                            name='mass', label='$m_{Z}$'),                     
+        hist.axis.StrCategory(['MC', 'Data'], name='label', label='label'),
+        storage=hist.storage.Weight()
+    )
+
+    print("\tFilling hist from data...")
+    for batch in tqdm(dataSET.to_batches(columns = columns)):
+        df = batch.to_pandas()
+        
+        HIST.fill(
+            pT = df.pT,
+            y = np.abs(df.y),
+            phi = df.phi,
+            mass = df.mass,
+            weight = df['weight'],
+            label='Data'
+        )
+    
+    print("\tFilling hist from mc...")
+    for batch in tqdm(mcSET.to_batches(columns = columns)):
+        df = batch.to_pandas()
+        
+        HIST.fill(
+            pT = df.pT,
+            y = np.abs(df.y),
+            phi = df.phi,
+            mass = df.mass,
+            weight = df['weight'],
+            label='MC'
+        )
+    
+    with fsspec_xrootd.XRootDFile(fs=fs, path=writepath, mode='wb') as f:
+        pickle.dump(HIST, f)
+
+    print("\tDone.")
+    print()
+
+    return HIST
+
+def get_jets(folder, overwrite=False):
+    raise NotImplementedError("get_jets still in progress")
+    basepath = '/store/user/srothman/%s'%folder
+    writepath = "%s/%shist.pickle"%(basepath, "jet")
+
+    check = check_exists(writepath, overwrite)
+    if check is not None:
+        return check
+
+    dataPath = "%s/SingleMuon/jets/parquet"%basepath
+    mcPath = "%s/DYJetsToLL/jets/parquet"%basepath
+
+    dataColumns = ['pT', 'eta', 'weight', 'phi', 'bTag', 'cTag', 'nConstituents']
+    mcColumns = dataColumns[:] + ['genPT', 'genPhi', 'genEta', 'genFlav']
+
+    dataSET = ds.dataset(dataPath, format='parquet', filesystem=fs)
+    mcSET = ds.dataset(mcPath, format='parquet', filesystem=fs)
+
+    HIST = hist.Hist(
+        hist.axis.Regular(50, 0, 500, 
+                            name='pT', label='$p_{T,jet}$'),
+        hist.axis.Regular(50, 0, 3, 
+                            name='eta', label='|$\eta_{jet}$|'),
+         hist.axis.Regular(50, -np.pi, np.pi, 
+                            name='phi', label='$\phi_{jet}$'),                   
+        hist.axis.StrCategory(['MC', 'Data'], name='label', label='label'),
+        storage=hist.storage.Weight()
+    )
+
+    print("\tFilling hist from data...")
+    for batch in tqdm(dataSET.to_batches(columns = dataColumns)):
+        df = batch.to_pandas()
+        
+        HIST.fill(
+            pT = df.pT,
+            eta = np.abs(df.eta),
+            phi = df.phi,
+            weight = df['weight'],
+            label='Data'
+        )
+    
+    print("\tFilling hist from mc...")
+    for batch in tqdm(mcSET.to_batches(columns = mcColumns)):
+        df = batch.to_pandas()
+        
+        HIST.fill(
+            pT = df.pT,
+            eta = np.abs(df.eta),
+            phi = df.phi,
+            weight = df['weight'],
+            label='MC'
+        )
+    
+    with fsspec_xrootd.XRootDFile(fs=fs, path=writepath, mode='wb') as f:
+        pickle.dump(HIST, f)
+
+    print("\tDone.")
+    print()
+
+    return HIST
+
+def get_EEC(name, folder, overwrite=False):
     '''
     Name should be one of EEC<N> with N=2,3,4,5,6
                           or EECnonIRC<N> with N=12,22,13
     '''
+    edges, _ = read_summary(folder)
+
+    basepath = '/store/user/srothman/%s'%folder
+
     print("doing EEC with name", name)
 
     writepath = "%s/%shist.pickle"%(basepath, name)
 
-    if fs.exists(writepath):
-        print("\tTarget file already exists at:", writepath)
-        if overwrite:
-            print("\t\tOverwriting...")
-        else:
-            print("\tUsing pre-existing histogram...")
-            with fsspec_xrootd.XRootDFile(fs=fs, path=writepath, mode='rb') as f:
-                return pickle.load(f)
+    check = check_exists(writepath)
+    if check is not None:
+        return check
 
-
-
-    dataPath = "%s/DoubleMuon/jets/parquet"%basepath
+    dataPath = "%s/SingleMuon/jets/parquet"%basepath
     mcPath = "%s/DYJetsToLL/jets/parquet"%basepath
 
     dataColumns = ['pT', 'eta', 'weight']
@@ -78,7 +268,6 @@ def get_EEC(name, edges, overwrite=False):
         mcColumns.append("%swt%d"%(name,i))
         mcColumns.append("gen%swt%d"%(name,i))
 
-    #in future can optimize by only reading the columns we care about
     dataSET = ds.dataset(dataPath, format='parquet', filesystem=fs)
     mcSET = ds.dataset(mcPath, format='parquet', filesystem=fs)
 
@@ -102,7 +291,7 @@ def get_EEC(name, edges, overwrite=False):
             HIST.fill(
                 dR = dRs[i],
                 pT = df.pT,
-                eta = df.eta,
+                eta = np.abs(df.eta),
                 label = 'Data',
                 weight = df['%swt%d'%(name,i)] * df['weight']
             )
@@ -137,12 +326,3 @@ def get_EEC(name, edges, overwrite=False):
     print()
 
     return HIST
-
-EEC2 = get_EEC("EEC2", edges)
-EEC3 = get_EEC("EEC3", edges)
-EEC4 = get_EEC("EEC4", edges)
-EEC5 = get_EEC("EEC5", edges)
-EEC6 = get_EEC("EEC6", edges)
-EECnonIRC12 = get_EEC("EECnonIRC12", edges)
-EECnonIRC22 = get_EEC("EECnonIRC22", edges)
-EECnonIRC13 = get_EEC("EECnonIRC13", edges)

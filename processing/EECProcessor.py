@@ -136,7 +136,7 @@ class EECProcessor(processor.ProcessorABC):
             nmu = ak.sum(ak.num(dR))
             u = ak.unflatten(np.random.random(nmu).astype(dtype=np.float32), ak.num(dR))
             unmatchedSF = kSmearMC(muons.charge, muons.pt, muons.eta, muons.phi, muons.nTrackerLayers, u, 0, 0)
-        
+
             rcSF = ak.where(ak.is_none(dR, axis=-1), unmatchedSF, matchedSF)
         
         muons['pt'] = muons.pt*rcSF
@@ -275,7 +275,7 @@ class EECProcessor(processor.ProcessorABC):
             EECnames.append("Full%dPtEEC"%i)
         
         for name in EECnames:
-            EEC = data[name]
+            EEC = data["%s%s"%(self.args.PU, name)]
             idxs = ak.materialized(EEC.jetIdx)
             runs = ak.run_lengths(idxs)
             data[name] = ak.unflatten(EEC, ak.flatten(runs), axis=-1)

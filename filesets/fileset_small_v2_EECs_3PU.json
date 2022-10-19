@@ -1,0 +1,26 @@
+{
+	"DYJetsToLL": [
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_1.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_10.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_100.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_101.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_102.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_103.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_104.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_105.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_106.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/DYJetsToLL/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/DYJetsToLL_M-50_madgraphMLM-pythia8/220922_180715/0000/nano_mc2017_107.root"
+	],
+	"SingleMuon": [
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_1.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_10.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_100.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_101.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_102.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_103.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_104.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_105.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_106.root",
+		"root://cmsxrootd.fnal.gov///store/group/lpcpfnano/srothman/v2_EECs_3PU/2017/SingleMuon/SingleMuon/SingleMuon_Run2017C/220922_180614/0000/nano_data2017_107.root"
+	]
+}

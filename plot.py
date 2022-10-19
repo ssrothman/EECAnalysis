@@ -8,12 +8,6 @@ import os
 import matplotlib.colors
 import mplhep as hep
 
-def mkdir(path, exist_ok=False):
-    try:
-        os.mkdir(path)
-    except FileExistsError as e:
-        if not exist_ok:
-            raise e
     
 XSEC =  (6077.22) * 1000  #in fb
 LUMI = 7.545787391 #in fb-1
@@ -54,13 +48,6 @@ effective_lumi_err = xsec_err/XSEC * effective_lumi
 print("Data luminosity:",LUMI)
 print("Effective MC luminosity",effective_lumi)
 
-
-def band(x, y, yerr, label, ax=None):
-    if ax is None:
-        ax = plt.gca()
-    line = ax.plot(x, y, 'o--', linewidth=1, markersize=2)
-    ax.fill_between(x, y-yerr, y+yerr, label=label, color=line[0].get_color(), alpha=0.7)
-    return line
 
 def dataMC(MC, DATA, axis, fname, slc = slice(None,None,None)):
     '''

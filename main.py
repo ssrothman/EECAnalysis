@@ -19,8 +19,8 @@ Maybe better EEC/jet linking?
 '''
 
 #read in json config
-configType = "PUPPI"
-filesetType = "test_v5"
+configType = "Puppi"
+filesetType = "small_v3_EECs_3PU"
 remote = False
 
 configName = "config_%s.json"%configType
@@ -91,7 +91,7 @@ if remote:
 
 else:
   runner = processor.Runner(
-    executor = processor.FuturesExecutor(workers=4),
+    executor = processor.FuturesExecutor(workers=5),
     schema=NanoAODSchema,
     #maxchunks=4,
     chunksize = 500000000

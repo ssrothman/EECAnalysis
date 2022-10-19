@@ -3,8 +3,9 @@
   "muons" : "Muon",
   "jets" : "selectedPatJetsAK4PFPuppi",
   "parts" : "PFCands",
+  "PU" : "Puppi",
   
-  "genParts" : "GenCands",
+  "genParts" : "GenPart",
   "genJets" : "ak4GenJetsNoNu",
 
   "evtCuts" : [
